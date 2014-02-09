@@ -5,18 +5,27 @@
 #include <unistd.h>
 
 #include "myfsck.h"
+#include "readwrite.h"
+#include "read_partition.h"
 
-const char *optstring = "p:i:";
-const char *usage_string = "[-p <partition number>] [-i /path/to/disk/image/]";
+const char *optstring = "p:f:i:";
+const char *usage_strings[] = {"[-p <partition number>]",
+                               "[-f <partition number>]",
+                               "[-i /path/to/disk/image/]"};
 
-void print_usage(char *name) {
-
-        printf("usage: %s %s\n", name, usage_string);
+void print_usage(char *name)
+{
+        printf("usage: %s ", name);
+        for (int i = 0; i < sizeof(usage_strings); i++) {
+                printf("%s ", usage_strings[i]);
+        }
+        printf("\n");
         exit(-1);
 }
 
 int main(int argc, char *argv[])
 {
+        char read_partition = 0;
         int partition_number, opt;
         char path_to_disk_image[256];
 
@@ -28,6 +37,7 @@ int main(int argc, char *argv[])
                 switch (opt) {
                 case 'p':
                         partition_number = atoi(optarg);
+                        read_partition = 1;
                         break;
                 case 'i':
                         if (strlen(optarg) > 256) {
@@ -38,7 +48,10 @@ int main(int argc, char *argv[])
                         break;
                 }
         }
-        printf("%d %s\n", partition_number, path_to_disk_image);
+
+        if (read_partition) {
+                do_read_partition(partition_number, path_to_disk_image);
+        }
 
         return 0;
 }
