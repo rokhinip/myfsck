@@ -16,7 +16,7 @@ const char *usage_strings[] = {"[-p <partition number>]",
 void print_usage(char *name)
 {
         printf("usage: %s ", name);
-        for (int i = 0; i < sizeof(usage_strings); i++) {
+        for (int i = 0; i < sizeof(usage_strings) / sizeof(char*); i++) {
                 printf("%s ", usage_strings[i]);
         }
         printf("\n");
