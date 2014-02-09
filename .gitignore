@@ -16,3 +16,12 @@
 *.exe
 *.out
 *.app
+
+# Others
+*.sh
+*.cfg
+*.sh
+*.pl
+*.pdf
+disk
+doc/
