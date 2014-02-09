@@ -16,6 +16,8 @@
 *.exe
 *.out
 *.app
+myfsck
+readwrite
 
 # Others
 *.sh
