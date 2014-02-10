@@ -1,12 +1,10 @@
 CC = gcc
 CFLAGS = -Wall -Werror -std=c99 -g
 
-LIB = -lm
-
 SRCDIR = src
 IDIR = include
 
-_SRC = readwrite.c read_partition.c read_superblock.c
+_SRC = readwrite.c read_partition.c disk.c
 SRC = $(patsubst %, $(SRCDIR)/%, $(_SRC))
 
 OBJ = $(patsubst %.c, %.o, $(_SRC))

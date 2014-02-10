@@ -307,24 +307,6 @@ char * read_inode_table(char *disk, int partition_number, int group_number)
         return read_block(disk, partition_number, inode_table_id);
 }
 
-// test if an inode is allocated in the bitmap
-int inode_allocated(char *disk, int partition_number, int inode_number)
-{
-        struct ext2_super_block ext2_sb;
-
-        // get inodes_per_group
-        CHECK_ERROR(-1, do_read_superblock(disk, partition_number, &ext2_sb));
-        int inodes_per_group = get_inodes_per_group(&ext2_sb);
-
-        // inode start from 1
-        int group_number = (inode_number - 1) / inodes_per_group;
-        int inode_offset_in_group = (inode_number - 1) % inodes_per_group;
-
-        char *map = read_inode_bitmap(disk, partition_number, group_number);
-
-        return allocated(map, inode_offset_in_group);
-}
-
 // test if a block is allocated in the bitmap
 int block_allocated(char *disk, int partition_number, int block_number)
 {
@@ -339,8 +321,30 @@ int block_allocated(char *disk, int partition_number, int block_number)
         int block_offset_in_group = block_number % blocks_per_group;
 
         char *map = read_block_bitmap(disk, partition_number, group_number);
+        int ret = allocated(map, block_offset_in_group);
+        free(map);
 
-        return allocated(map, block_offset_in_group);
+        return ret;
+}
+
+// test if an inode is allocated in the bitmap
+int inode_allocated(char *disk, int partition_number, int inode_number)
+{
+        struct ext2_super_block ext2_sb;
+
+        // get inodes_per_group
+        CHECK_ERROR(-1, do_read_superblock(disk, partition_number, &ext2_sb));
+        int inodes_per_group = get_inodes_per_group(&ext2_sb);
+
+        // inode start from 1
+        int group_number = (inode_number - 1) / inodes_per_group;
+        int inode_offset_in_group = (inode_number - 1) % inodes_per_group;
+
+        char *map = read_inode_bitmap(disk, partition_number, group_number);
+        int ret = allocated(map, inode_offset_in_group);
+        free(map);
+
+        return ret;
 }
 
 void verify_block_allocted(char *disk, int partition_number, int group_number)
@@ -407,9 +411,10 @@ void verify_inode_allocted(char *disk, int partition_number, int group_number)
 }
 
 // read the inode entry into the result
-int get_inode_entry(char *disk, int partition_number, int inode_number, struct ext2_inode *result)
+struct ext2_inode * get_inode_entry(char *disk, int partition_number, int inode_number)
 {
         struct ext2_super_block ext2_sb;
+        struct ext2_inode *inode;
 
         // get inodes_per_group
         CHECK_ERROR(-1, do_read_superblock(disk, partition_number, &ext2_sb));
@@ -419,12 +424,18 @@ int get_inode_entry(char *disk, int partition_number, int inode_number, struct e
         int group_number = (inode_number - 1) / inodes_per_group;
         int inode_offset_in_group = (inode_number - 1) % inodes_per_group;
 
-        int table_offset = inode_offset_in_group * sizeof(*result);
+        int table_offset = inode_offset_in_group * sizeof(struct ext2_inode);
         char *table = read_inode_table(disk, partition_number, group_number);
 
-        memcpy(result, table+table_offset, sizeof(*result));
+        inode = (struct ext2_inode *)malloc(sizeof(struct ext2_inode));
+        if (!inode) {
+                error_at_line(-1, errno, __FILE__, __LINE__, NULL);
+        }
+        memcpy(inode, table+table_offset, sizeof(struct ext2_inode));
 
-        return 0;
+        free(table);
+
+        return inode;
 }
 
 //
@@ -439,7 +450,7 @@ int is_dir(struct ext2_inode *inode)
 void print_and_verify_partition_info(char *disk, int partition_number, int group_number)
 {
         struct ext2_super_block ext2_sb;
-        struct ext2_inode inode;
+        struct ext2_inode *inode;
 
         do_print_superblock(disk, partition_number);
 
@@ -457,8 +468,10 @@ void print_and_verify_partition_info(char *disk, int partition_number, int group
         }
 
         // get the root dir
-        get_inode_entry(disk, partition_number, 2, &inode);
+        inode = get_inode_entry(disk, partition_number, 2);
 
-        printf("is root inode a dir? %d\n", is_dir(&inode));
+        printf("is root inode a dir? %d\n", is_dir(inode));
         printf("is root inode allocated? %d\n", inode_allocated(disk, partition_number, 2));
+
+        free(inode);
 }
