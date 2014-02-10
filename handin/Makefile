@@ -1,10 +1,12 @@
 CC = gcc
 CFLAGS = -Wall -Werror -std=c99 -g
 
+LIB = -lm
+
 SRCDIR = src
 IDIR = include
 
-_SRC = readwrite.c read_partition.c
+_SRC = readwrite.c read_partition.c read_superblock.c
 SRC = $(patsubst %, $(SRCDIR)/%, $(_SRC))
 
 OBJ = $(patsubst %.c, %.o, $(_SRC))
@@ -18,7 +20,7 @@ readwrite: $(SRCDIR)/readwrite.c
 	$(CC) $(CFLAGS) -DTESTREADWRITE $(SRCDIR)/readwrite.c -o readwrite
 
 myfsck: $(SRCDIR)/myfsck.c $(OBJ)
-	$(CC) -I$(IDIR) $(CFLAGS) $(OBJ) $(SRCDIR)/myfsck.c -o myfsck
+	$(CC) -I$(IDIR) $(CFLAGS) $(OBJ) $(SRCDIR)/myfsck.c $(LIB) -o myfsck
 
 
 .PHONY: clean

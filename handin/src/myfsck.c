@@ -7,6 +7,7 @@
 #include "myfsck.h"
 #include "readwrite.h"
 #include "read_partition.h"
+#include "read_superblock.h"
 
 const char *optstring = "p:f:i:";
 const char *usage_strings[] = {"[-p <partition number>]",
@@ -49,9 +50,13 @@ int main(int argc, char *argv[])
                 }
         }
 
+        // part I
         if (read_partition) {
-                do_read_partition(partition_number, path_to_disk_image);
+                do_print_partition(path_to_disk_image, partition_number);
         }
+
+        // part II
+        print_and_verify_partition_info(path_to_disk_image, partition_number, 0);
 
         return 0;
 }

@@ -65,6 +65,7 @@ void print_sector (unsigned char *buf)
  * modifies:
  *   void *into
  */
+
 void read_sectors (int64_t start_sector, unsigned int num_sectors, void *into)
 {
         ssize_t ret;
@@ -140,6 +141,19 @@ void write_sectors (int64_t start_sector, unsigned int num_sectors, void *from)
                         "returned %"PRId64"\n", start_sector, num_sectors, ret);
                 exit(-1);
         }
+}
+
+int open_read_close_sect(char *disk, int start_sect, int num_sectors, char *buf)
+{
+        device = open(disk, O_RDONLY);
+        if (device < 0) {
+                perror("Could not open device file");
+                return -1;
+        }
+        read_sectors(start_sect, num_sectors, buf);
+        close(device);
+        
+        return 0;
 }
 
 #ifdef TESTREADWRITE
