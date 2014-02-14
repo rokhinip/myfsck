@@ -5,6 +5,7 @@
 
 // struct for one block group
 typedef struct group_s {
+        int id;
         struct ext2_group_desc *desc;
         char *block_bitmap;
         char *inode_bitmap;
@@ -13,6 +14,7 @@ typedef struct group_s {
 
 // struct for one partition
 typedef struct partition_s {
+        int id;
         int base_sector;
         struct partition *partition_info;
         struct ext2_super_block *super_block;
