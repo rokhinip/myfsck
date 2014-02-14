@@ -26,7 +26,7 @@ const unsigned int block_group_desc_offset = 2048;
 //
 //
 // read a superblock struct into the result
-int do_read_superblock(char *disk, int partition_number, struct ext2_super_block *result)
+int read_superblock(int partition_number, struct ext2_super_block *result)
 {
         int base_sector;
         char buf[sector_size_bytes];
