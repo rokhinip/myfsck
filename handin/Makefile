@@ -4,7 +4,7 @@ CFLAGS = -Wall -Werror -std=c99 -g
 SRCDIR = src
 IDIR = include
 
-_SRC = readwrite.c read_partition.c disk.c link_list.c
+_SRC = readwrite.c read_partition.c disk.c link_list.c partition.c printer.c
 SRC = $(patsubst %, $(SRCDIR)/%, $(_SRC))
 
 OBJ = $(patsubst %.c, %.o, $(_SRC))

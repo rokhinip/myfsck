@@ -6,6 +6,8 @@
 
 #include "myfsck.h"
 #include "disk.h"
+#include "util/partition.h"
+#include "util/printer.h"
 
 const char *optstring = "p:f:i:";
 const char *usage_strings[] = {"[-p <partition number>]",

@@ -77,7 +77,7 @@ int ll_append(list_t *list, void *item)
 // remove the last item
 int ll_remove(list_t *list, void *item)
 {
-        if (list->len <= 0) {
+        if (list->len == 0) {
                 fprintf(stderr, "nothing to remove\n");
                 return -1;
         }
