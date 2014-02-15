@@ -4,7 +4,7 @@ CFLAGS = -Wall -Werror -std=c99 -g
 SRCDIR = src
 IDIR = include
 
-_SRC = readwrite.c read_partition.c disk.c
+_SRC = readwrite.c read_partition.c disk.c link_list.c
 SRC = $(patsubst %, $(SRCDIR)/%, $(_SRC))
 
 OBJ = $(patsubst %.c, %.o, $(_SRC))
@@ -17,12 +17,16 @@ $(OBJ): $(SRC)
 readwrite: $(SRCDIR)/readwrite.c
 	$(CC) $(CFLAGS) -DTESTREADWRITE $(SRCDIR)/readwrite.c -o readwrite
 
+testlist: $(SRCDIR)/link_list.c
+	$(CC) -I$(IDIR) $(CFLAGS) -DTESTLINKLIST $(SRCDIR)/link_list.c -o testlist
+
 myfsck: $(SRCDIR)/myfsck.c $(OBJ)
 	$(CC) -I$(IDIR) $(CFLAGS) $(OBJ) $(SRCDIR)/myfsck.c $(LIB) -o myfsck
 
 
 .PHONY: clean
 clean:
-	@rm *.o -fr
-	@rm readwrite -fr
-	@rm myfsck -fr
+	@rm *.o -f
+	@rm readwrite -f
+	@rm myfsck -f
+	@rm testlist -f
