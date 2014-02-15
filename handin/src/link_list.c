@@ -11,18 +11,6 @@
                 error_at_line(-1, errno, __FILE__, __LINE__, NULL);     \
         }
 
-list_t * ll_new_list(int item_size)
-{
-        list_t *list;
-        NEW_INSTANCE(list, list_t);
-        list->head = NULL;
-        list->tail = NULL;
-        list->len = 0;
-        list->item_size = item_size;
-
-        return list;
-}
-
 static node_t *new_node(void *item, int item_size)
 {
         node_t *node;
@@ -40,6 +28,31 @@ static node_t *new_node(void *item, int item_size)
         return node;
 }
 
+list_t * ll_new_list(int item_size)
+{
+        list_t *list;
+        NEW_INSTANCE(list, list_t);
+
+        node_t *head_node, *tail_node;
+        NEW_INSTANCE(head_node, node_t);
+        NEW_INSTANCE(tail_node, node_t);
+
+        list->head = head_node;
+        head_node->next = tail_node;
+        head_node->prev = NULL;
+        head_node->item = NULL;
+
+        list->tail = tail_node;
+        tail_node->prev = head_node;
+        tail_node->next = NULL;
+        tail_node->item = NULL;
+
+        list->len = 0;
+        list->item_size = item_size;
+
+        return list;
+}
+
 static void delete_node(node_t *node)
 {
         free(node->item);
@@ -50,17 +63,12 @@ static void delete_node(node_t *node)
 int ll_append(list_t *list, void *item)
 {
         node_t *node = new_node(item, list->item_size);
+        node_t *tail = list->tail;
 
-        if (list->len == 0) {
-                list->tail = node;
-                list->head = node;
-                list->len++;
-                return list->len;
-        }
-
-        node->prev = list->tail;
-        list->tail->next = node;
-        list->tail = node;
+        node->next = tail;
+        node->prev = tail->prev;
+        tail->prev->next = node;
+        tail->prev = node;
 
         list->len++;
         return list->len;
@@ -74,15 +82,11 @@ int ll_remove(list_t *list, void *item)
                 return -1;
         }
 
-        node_t *last = list->tail;
+        node_t *last = list->tail->prev;
         memcpy(item, last->item, list->item_size);
 
-        if (list->len == 1) {
-                list->head = NULL;
-        } else {
-                last->prev->next = NULL;
-        }
-        list->tail = last->prev;
+        last->prev->next = last->next;
+        last->next->prev = last->prev;
         delete_node(last);
 
         list->len--;
@@ -93,17 +97,12 @@ int ll_remove(list_t *list, void *item)
 int ll_push(list_t *list, void *item)
 {
         node_t *node = new_node(item, list->item_size);
+        node_t *head = list->head;
 
-        if (list->len == 0) {
-                list->tail = node;
-                list->head = node;
-                list->len++;
-                return list->len;
-        }
-
-        node->next = list->head;
-        list->head->prev = node;
-        list->head = node;
+        node->prev = head;
+        node->next = head->next;
+        head->next->prev = node;
+        head->next = node;
 
         list->len++;
         return list->len;
@@ -117,15 +116,11 @@ int ll_pop(list_t *list, void *item)
                 return -1;
         }
 
-        node_t *first = list->head;
+        node_t *first = list->head->next;
         memcpy(item, first->item, list->item_size);
 
-        if (list->len == 1) {
-                list->tail = NULL;
-        } else {
-                first->next->prev = NULL;
-        }
-        list->head = first->next;
+        first->prev->next = first->next;
+        first->next->prev = first->prev;
         delete_node(first);
 
         list->len--;
@@ -138,19 +133,24 @@ int ll_delete_list(list_t *list)
         node_t *node, *next_node;
 
         if (list->len == 0) {
+                free(list->head);
+                free(list->tail);
                 free(list);
                 return 0;
         }
 
-        node = list->head;
+        node = list->head->next;
         next_node = node->next;
-        for (; next_node != NULL;) {
-                free(node);
+
+        for (; next_node != list->tail;) {
+                delete_node(node);
                 node = next_node;
                 next_node = node->next;
         }
-        free(node);
+        delete_node(node);
 
+        free(list->head);
+        free(list->tail);
         free(list);
 
         return 0;
@@ -186,6 +186,13 @@ int main(int argc, char *argv[])
                 printf("item %d\n", item);
         }
         ll_delete_list(list);
+
+        list = ll_new_list(sizeof(int));
+        for (int i = 0; i < sizeof(array) / sizeof(int); i++) {
+                ll_push(list, &array[i]);
+        }
+        ll_delete_list(list);
+
         return 0;
 }
 
