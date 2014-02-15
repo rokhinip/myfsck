@@ -17,4 +17,6 @@ int get_symbolic_path(partition_t *pt, int inode_id, char *path);
 
 int search_file(partition_t *pt, char *path, struct ext2_dir_entry_2 *ret);
 
+int print_part2(disk_t *disk);
+
 #endif

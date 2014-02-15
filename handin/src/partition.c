@@ -7,6 +7,7 @@
 #include "disk.h"
 #include "genhd.h"
 #include "readwrite.h"
+#include "slice.h"
 
 #define NEW_INSTANCE(ret, structure)                                    \
         if (((ret) = malloc(sizeof(structure))) == NULL) {              \
@@ -166,19 +167,7 @@ int get_dir(partition_t *pt, int inode_id, struct ext2_dir_entry_2 *dir)
         return 0;
 }
 
-static int append(block_slice_t *slice, int item)
-{
-        if (slice->len >= slice->cap) {
-                fprintf(stderr, "append failed: exceed capcity\n");
-                return -1;
-        }
-        slice->array[slice->len] = item;
-        slice->len++;
-
-        return slice->len;
-}
-
-static int get_indirect_block(block_slice_t *slice, partition_t *pt, int block_id)
+static int get_indirect_block(slice_t *slice, partition_t *pt, int block_id)
 {
         int entries_per_block = get_block_size(pt) / 4; // 32-bit int
         int *block = (int *)read_block(pt, block_id, 1);
@@ -188,14 +177,14 @@ static int get_indirect_block(block_slice_t *slice, partition_t *pt, int block_i
                 if (block[i] == 0) {
                         return 0;
                 }
-                append(slice, block[i]);
+                append(slice, &block[i]);
         }
 
         free(block);
         return i;
 }
 
-static int get_double_indirect_block(block_slice_t *slice, partition_t *pt, int block_id)
+static int get_double_indirect_block(slice_t *slice, partition_t *pt, int block_id)
 {
         int entries_per_block = get_block_size(pt) / 4; // 32-bit int
         int *indirect_block = (int *)read_block(pt, block_id, 1);
@@ -215,7 +204,7 @@ static int get_double_indirect_block(block_slice_t *slice, partition_t *pt, int 
         return i;
 }
 
-static int get_triple_indirect_block(block_slice_t *slice, partition_t *pt, int block_id)
+static int get_triple_indirect_block(slice_t *slice, partition_t *pt, int block_id)
 {
         int entries_per_block = get_block_size(pt) / 4; // 32-bit int
         int *double_indirect_block = (int *)read_block(pt, block_id, 1);
@@ -235,26 +224,18 @@ static int get_triple_indirect_block(block_slice_t *slice, partition_t *pt, int 
         return i;
 }
 
-block_slice_t * get_block_slice(partition_t *pt, int inode_id)
+slice_t * get_blocks(partition_t *pt, int inode_id)
 {
         struct ext2_inode *inode = get_inode_entry(pt, inode_id);
         int cap = inode->i_blocks / (2 << pt->super_block->s_log_block_size);
 
-        block_slice_t *slice;
-        NEW_INSTANCE(slice, block_slice_t);
-
-        slice->cap = cap;
-        slice->len = 0;
-        slice->array = malloc(sizeof(int) * slice->cap);
-        if (!slice->array) {
-                error_at_line(-1, errno, __FILE__, __LINE__, NULL);
-        }
+        slice_t *slice = make_slice(cap, sizeof(int));
 
         for (int i = 0; i < 12; i++) {
                 if (inode->i_block[i] == 0) {
                         return slice;
                 }
-                append(slice, inode->i_block[i]);
+                append(slice, &inode->i_block[i]);
         }
 
         if (get_indirect_block(slice, pt, inode->i_block[12]) == 0) {
@@ -266,4 +247,54 @@ block_slice_t * get_block_slice(partition_t *pt, int inode_id)
         get_triple_indirect_block(slice, pt, inode->i_block[14]);
 
         return slice;
+}
+
+static int add_child_dir(partition_t *pt, slice_t *s, int block_id)
+{
+        int block_size = get_block_size(pt);
+        char *block = read_block(pt, block_id, 1);
+        int offset = 0;
+        struct ext2_dir_entry_2 dir;
+
+        for(;;) {
+                if (offset >= block_size) {
+                        break;
+                }
+                memcpy(&dir, block+offset, sizeof(dir));
+                if (dir.inode == 0) {
+                        break;
+                }
+
+                if (dir.name_len == 1 && strncmp(dir.name, ".", 1) == 0) {
+                        offset += dir.rec_len;
+                        continue;
+                }
+                if (dir.name_len == 2 && strncmp(dir.name, "..", 2) == 0) {
+                        offset += dir.rec_len;
+                        continue;
+                }
+
+                append(s, &dir.inode);
+                offset += dir.rec_len;
+        }
+
+        free(block);
+
+        return 0;
+}
+
+slice_t *get_child_inodes(partition_t *pt, int inode_id)
+{
+        slice_t *inode_slice = make_slice(1024, sizeof(int));
+        slice_t *block_slice = get_blocks(pt, inode_id);
+
+        for (int i = 0; i < block_slice->len; i++) {
+                int block_id;
+                get(block_slice, i, &block_id);
+                add_child_dir(pt, inode_slice, block_id);
+        }
+        
+        delete_slice(block_slice);
+
+        return inode_slice;
 }

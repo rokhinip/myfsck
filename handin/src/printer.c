@@ -8,6 +8,7 @@
 
 #include "disk.h"
 #include "read_partition.h"
+#include "slice.h"
 #include "util/printer.h"
 #include "util/partition.h"
 
@@ -137,16 +138,17 @@ void print_inode(partition_t *pt, int inode_id)
         printf("block count: %d\n", inode->i_blocks);
 }
 
-
-
 void verify_file_block_allocated(partition_t *pt, int inode)
 {
-        block_slice_t *slice = get_block_slice(pt, inode);
+        slice_t *slice = get_blocks(pt, inode);
         for (int i = 0; i < slice->len; i++) {
-                if (!block_allocated(pt, slice->array[i])) {
-                        printf("error data block[%d] not allocated in block_bitmap\n", slice->array[i]);
+                int block_id;
+                get(slice, i, &block_id);
+                if (!block_allocated(pt, block_id)) {
+                        printf("error data block[%d] not allocated in block_bitmap\n", block_id);
                 }
         }
+        delete_slice(slice);
         printf("ok! all data blocks allocated\n");
 }
 
@@ -186,18 +188,6 @@ static void list_dir_in_block(partition_t *pt, int block_id)
         free(block);
 }
 
-
-static void print_slice(block_slice_t *slice)
-{
-        printf("cap: %d\n", slice->cap);
-        printf("len: %d\n", slice->len);
-        printf("blocks:\n");
-        for (int i = 0; i < slice->len; i++) {
-                printf("%d ", slice->array[i]);
-        }
-        printf("\n");
-}
-
 void print_ls(partition_t *pt, char *path)
 {
         printf("ls %s\n", path);
@@ -208,13 +198,15 @@ void print_ls(partition_t *pt, char *path)
                 return;
         }
         //struct ext2_inode *inode = get_inode_entry(pt, dir->inode);
-        block_slice_t *slice = get_block_slice(pt, dir.inode);
-        print_slice(slice);
+        slice_t *slice = get_blocks(pt, dir.inode);
+        //print_slice(slice);
 
         for (int i = 0; i < slice->len; i++) {
-                list_dir_in_block(pt, slice->array[i]);
+                int block_id;
+                get(slice, i, &block_id);
+                list_dir_in_block(pt, block_id);
         }
-        free(slice);
+        delete_slice(slice);
 }
 
 static int find_child_in_block(partition_t *pt, int block_id, char *childname, struct ext2_dir_entry_2 *ret)
@@ -248,17 +240,19 @@ static int find_child_in_block(partition_t *pt, int block_id, char *childname, s
 
 static int find_child(partition_t *pt, struct ext2_dir_entry_2 *parent, char *childname, struct ext2_dir_entry_2 *ret)
 {
-        block_slice_t *slice = get_block_slice(pt, parent->inode);
+        slice_t *slice = get_blocks(pt, parent->inode);
 
         int child_inode = 0;
         for (int i = 0; i < slice->len; i++) {
-                print_slice(slice);
-                child_inode = find_child_in_block(pt, slice->array[i], childname, ret);
+                //print_slice(slice);
+                int block_id;
+                get(slice, i, &block_id);
+                child_inode = find_child_in_block(pt, block_id, childname, ret);
                 if (child_inode != 0) {
                         break;
                 }
         }
-        free(slice);
+        delete_slice(slice);
         return child_inode;
 }
 
@@ -317,8 +311,50 @@ int get_symbolic_path(partition_t *pt, int inode_id, char *path)
                 memcpy(path, inode->i_block, sizeof(inode->i_block));
                 return 0;
         }
-        
+
         printf("too long symbol, not going to handle this moment, i_block: %d\n", inode->i_blocks);
-        
+
         return -1;
+}
+
+int print_part2(disk_t *disk)
+{
+        print_all_groups_desc(disk);
+        //printf("\n");
+        verify_all_blocks_allocated(disk);
+        verify_all_inodes_allocated(disk);
+        printf("is root inode a dir? %d\n", is_dir(disk->partitions[0], 2));
+        printf("is root inode allocated? %d\n", inode_allocated(disk->partitions[0], 2));
+        //print_and_verify_partition_info(path_to_disk_image, partition_number, 0);
+        struct ext2_dir_entry_2 dir;
+
+        get_dir(disk->partitions[0], 2, &dir);
+        //print_dir_info(&dir);
+
+        //print_ls(disk->partitions[0], &dir);
+
+        int inode = search_file(disk->partitions[0], "/lions", &dir);
+        printf("inode for %s is %d\n", "/lions", inode);
+
+        inode = search_file(disk->partitions[0], "/lions/tigers/bears/ohmy.txt", &dir);
+        printf("inode for %s is %d\n", "/lions/tigers/bears/ohmy.txt", dir.inode);
+        print_dir_info(&dir);
+
+        verify_file_block_allocated(disk->partitions[0], dir.inode);
+
+        inode = search_file(disk->partitions[0], "/oz/tornado/dorothy", &dir);
+        printf("inode for %s is %d\n", "/oz/tornado/dorothy", inode);
+        print_dir_info(&dir);
+
+        inode = search_file(disk->partitions[0], "/oz/tornado/glinda", &dir);
+        printf("inode for %s is %d\n", "/oz/tornado/glinda", inode);
+        print_dir_info(&dir);
+
+        char path[256];
+        get_symbolic_path(disk->partitions[0], inode, path);
+        printf("target dir for glinda: %s\n", path);
+
+        //print_ls(disk->partitions[0], "/");
+
+        return 0;
 }
