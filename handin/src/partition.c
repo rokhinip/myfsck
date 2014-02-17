@@ -9,6 +9,8 @@
 #include "readwrite.h"
 #include "slice.h"
 
+#define MIN(a, b) (a) < (b) ? (a) : (b)
+
 #define NEW_INSTANCE(ret, structure)                                    \
         if (((ret) = malloc(sizeof(structure))) == NULL) {              \
                 error_at_line(-1, errno, __FILE__, __LINE__, NULL);     \
@@ -68,6 +70,26 @@ char * read_block(partition_t *pt, int block_index, int count)
         read_sectors(sector_offset, sectors_per_block*count, buf);
 
         return buf;
+}
+
+int write_block(partition_t *pt, int block_index, int count, char *buf)
+{
+        int block_size = get_block_size(pt);
+        if (block_size < 0) {
+                exit(-1);
+        }
+
+        int block_byte_offset = block_size * block_index;
+        int sector_offset =
+                pt->base_sector +
+                pt->partition_info->start_sect +
+                (block_byte_offset / sector_size_bytes);
+
+        int sectors_per_block = block_size / sector_size_bytes;
+
+        write_sectors(sector_offset, sectors_per_block*count, buf);
+
+        return 0;
 }
 
 // getters for one group
@@ -249,7 +271,7 @@ slice_t * get_blocks(partition_t *pt, int inode_id)
         return slice;
 }
 
-static int add_child_dir(partition_t *pt, slice_t *s, int block_id)
+static int add_child_inodes(partition_t *pt, slice_t *s, int block_id)
 {
         int block_size = get_block_size(pt);
         char *block = read_block(pt, block_id, 1);
@@ -260,21 +282,37 @@ static int add_child_dir(partition_t *pt, slice_t *s, int block_id)
                 if (offset >= block_size) {
                         break;
                 }
-                memcpy(&dir, block+offset, sizeof(dir));
+                memcpy(&dir, block+offset, MIN(sizeof(dir), (block_size - offset)));
                 if (dir.inode == 0) {
                         break;
                 }
 
-                if (dir.name_len == 1 && strncmp(dir.name, ".", 1) == 0) {
-                        offset += dir.rec_len;
-                        continue;
+                append(s, &dir.inode);
+                offset += dir.rec_len;
+        }
+
+        free(block);
+
+        return 0;
+}
+
+static int add_child_dirs(partition_t *pt, slice_t *s, int block_id)
+{
+        int block_size = get_block_size(pt);
+        char *block = read_block(pt, block_id, 1);
+        int offset = 0;
+        struct ext2_dir_entry_2 dir;
+
+        for(;;) {
+                if (offset >= block_size) {
+                        break;
                 }
-                if (dir.name_len == 2 && strncmp(dir.name, "..", 2) == 0) {
-                        offset += dir.rec_len;
-                        continue;
+                memcpy(&dir, block+offset, MIN(sizeof(dir), (block_size - offset)));
+                if (dir.inode == 0) {
+                        break;
                 }
 
-                append(s, &dir.inode);
+                append(s, &dir);
                 offset += dir.rec_len;
         }
 
@@ -291,10 +329,43 @@ slice_t *get_child_inodes(partition_t *pt, int inode_id)
         for (int i = 0; i < block_slice->len; i++) {
                 int block_id;
                 get(block_slice, i, &block_id);
-                add_child_dir(pt, inode_slice, block_id);
+                add_child_inodes(pt, inode_slice, block_id);
         }
-        
+
         delete_slice(block_slice);
 
         return inode_slice;
+}
+
+slice_t * get_child_dirs(partition_t *pt, int inode_id)
+{
+        slice_t *dir_slice = make_slice(1024, sizeof(struct ext2_dir_entry_2));
+        slice_t *block_slice = get_blocks(pt, inode_id);
+
+        for (int i = 0; i < block_slice->len; i++) {
+                int block_id;
+                get(block_slice, i, &block_id);
+                add_child_dirs(pt, dir_slice, block_id);
+        }
+
+        delete_slice(block_slice);
+
+        return dir_slice;
+}
+
+int get_lost_found_inode(partition_t *pt)
+{
+        slice_t *s = get_child_dirs(pt, 2); // get chilren of root
+
+        char *lost_found = "lost+found";
+
+        struct ext2_dir_entry_2 dir;
+        for (int i = 0; i < s->len; i++) {
+                get(s, i, &dir);
+                if (strncmp(dir.name, "lost+found", strlen(lost_found)) == 0) {
+                        return dir.inode;
+                }
+        }
+        printf("warning: no lost+found\n");
+        return 0;
 }

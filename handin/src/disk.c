@@ -67,15 +67,15 @@ static int load_inode_table(partition_t *pt, int group_id)
         group_t * g = pt->groups[group_id];
 
         g->entry_count = get_inodes_per_group(pt) - get_free_inodes_count(g);
-        g->inode_table = malloc(sizeof(struct ext2_inode *) * g->entry_count);
+        g->inode_table = malloc(sizeof(struct ext2_inode *) * get_inodes_per_group(pt));
         if (!g->inode_table) {
                 error_at_line(-1, errno, __FILE__, __LINE__, NULL);
         }
 
-        int block_count = (g->entry_count * sizeof(struct ext2_inode) + (get_block_size(pt) - 1)) /  get_block_size(pt);
+        int block_count = (get_inodes_per_group(pt) * sizeof(struct ext2_inode) + (get_block_size(pt) - 1)) /  get_block_size(pt);
         char *table = read_block(pt, get_inode_table_bid(g), block_count);
 
-        for (int i = 0; i < g->entry_count; i++) {
+        for (int i = 0; i < get_inodes_per_group(pt); i++) {
                 NEW_INSTANCE(g->inode_table[i], struct ext2_inode);
                 memcpy(g->inode_table[i], table+i*sizeof(struct ext2_inode), sizeof(struct ext2_inode));
         }

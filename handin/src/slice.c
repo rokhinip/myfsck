@@ -27,7 +27,7 @@ slice_t *make_slice(int cap, int item_size)
         return s;
 }
 
-int append(void *item)
+int append(slice_t *s, void *item)
 {
         if (s->len < s->cap) {
                 memcpy(s->array + (s->len*s->item_size), item, s->item_size);

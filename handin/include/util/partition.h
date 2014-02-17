@@ -5,6 +5,7 @@
 #include "slice.h"
 
 char * read_block(partition_t *pt, int block_index, int count);
+int write_block(partition_t *pt, int block_index, int count, char *buf);
 
 // get attributes for partition
 int get_number_of_groups(partition_t *pt);
@@ -24,6 +25,8 @@ struct ext2_inode * get_inode_entry(partition_t *pt, int inode_id);
 int get_dir(partition_t *pt, int inode_id, struct ext2_dir_entry_2 *dir);
 slice_t * get_blocks(partition_t *pt, int inode_id);
 slice_t * get_child_inodes(partition_t *pt, int inode_id);
+slice_t * get_child_dirs(partition_t *pt, int inode_id);
+int get_lost_found_inode(partition_t *pt);
 
 //
 int is_dir(partition_t *pt, int inode_id);

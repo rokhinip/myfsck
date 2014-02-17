@@ -19,4 +19,9 @@ int search_file(partition_t *pt, char *path, struct ext2_dir_entry_2 *ret);
 
 int print_part2(disk_t *disk);
 
+int print_child_dirs(partition_t *pt, int inode_id);
+
+int print_block_content(char *buf);
+
+void list_dir_in_block(partition_t *pt, int block_id);
 #endif

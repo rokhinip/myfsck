@@ -165,7 +165,7 @@ void print_group_desc(partition_t *pt, int group_number)
         printf("used_dirs_count: %d\n", g->desc->bg_used_dirs_count);
 }
 
-static void list_dir_in_block(partition_t *pt, int block_id)
+void list_dir_in_block(partition_t *pt, int block_id)
 {
         int block_size = get_block_size(pt);
         char *block = read_block(pt, block_id, 1);
@@ -320,6 +320,7 @@ int get_symbolic_path(partition_t *pt, int inode_id, char *path)
 int print_part2(disk_t *disk)
 {
         print_all_groups_desc(disk);
+
         //printf("\n");
         verify_all_blocks_allocated(disk);
         verify_all_inodes_allocated(disk);
@@ -356,5 +357,39 @@ int print_part2(disk_t *disk)
 
         //print_ls(disk->partitions[0], "/");
 
+        return 0;
+}
+
+int print_child_dirs(partition_t *pt, int inode_id)
+{
+        slice_t *s = get_child_dirs(pt, inode_id);
+        struct ext2_dir_entry_2 dir;
+        char name[256];
+
+        for (int i = 0; i < s->len; i++) {
+                get(s, i, &dir);
+                strncpy(name, dir.name, dir.name_len);
+                name[dir.name_len] = 0;
+                printf("%s ", name);
+        }
+
+        delete_slice(s);
+        return 0;
+}
+
+int print_block_content(char *buf)
+{
+        struct ext2_dir_entry_2 dir;
+
+        int offset = 0;
+        for (;;) {
+                memcpy(&dir, buf+offset, sizeof(dir));
+                if (dir.inode == 0) {
+                        // finish
+                        break;
+                }
+                print_dir_info(&dir);
+                offset += dir.rec_len;
+        }
         return 0;
 }

@@ -25,5 +25,5 @@ readwrite
 *.sh
 *.pl
 *.pdf
-disk
+disk*
 doc/
