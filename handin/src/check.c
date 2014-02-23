@@ -78,89 +78,14 @@ void print_dirs(partition_t *pt)
         ll_delete_list(queue);
 }
 
-int check_self_parent(partition_t *pt, int self_inode, int parent_inode)
+int modify_dir(struct ext2_dir_entry_2 *dir, int inode_id, char *name, int name_len)
 {
-        struct ext2_dir_entry_2 dir;
-
-        slice_t *s = get_child_dirs(pt, self_inode);
-
-        get(s, 0, &dir);
-        if (dir.inode != self_inode) {
-                printf("self ptr error\n");
-
-                if (dir.name_len == 1 && strncmp(dir.name, ".", 1) == 0) {
-                        // easy to fix
-                        printf("easy to fix\n");
-                } else {
-                        printf("missing self ptr\n");
-                }
-        }
-
-        get(s, 1, &dir);
-        if (dir.inode != parent_inode) {
-                if (dir.name_len == 2 && strncmp(dir.name, "..", 2) == 0) {
-                        // easy to fix
-                        printf("easy to fix\n");
-                } else {
-                        printf("missing parent ptr\n");
-                        struct ext2_inode *entry = get_inode_entry(pt, self_inode);
-                        int block_id = entry->i_block[0];
-                        list_dir_in_block(pt, block_id);
-                        printf("self_inode %d, parent_inode %d\n", self_inode, parent_inode);
-                        printf("dir inode %d\n", dir.inode);
-                        printf("parent ptr error\n");
-                        exit(0);
-                }
-
-        }
-
-        free(s);
+        dir->inode = inode_id;
+        dir->name_len = name_len;
+        dir->file_type = EXT2_FT_DIR;
+        strncpy(dir->name, name, name_len);
+        dir->rec_len = (8 + name_len + 3) / 4 * 4; // hard_code
         return 0;
-}
-
-int check_dir(partition_t *pt, int inode_id)
-{
-        struct ext2_dir_entry_2 dir;
-
-        slice_t *s = get_child_dirs(pt, inode_id);
-
-        if (inode_id == 2) { // root
-                get(s, 0, &dir);
-                if (strncmp(dir.name, ".", 1) != 0) {
-                        printf("root self ptr error\n");
-                        return 0;
-                }
-
-                get(s, 1, &dir);
-                if (strncmp(dir.name, "..", 2) != 0) {
-                        printf("root parent ptr error\n");
-                        return 0;
-                }
-        }
-
-        get(s, 0, &dir);
-        int parent_inode = dir.inode;
-        for (int i = 2; i < s->len; i++) {
-                get(s, i, &dir);
-                if (is_dir(pt, dir.inode)) {
-                        check_self_parent(pt, dir.inode, parent_inode);
-                }
-        }
-
-        free(s);
-        return 0;
-}
-
-void check_dir_ptrs(partition_t *pt)
-{
-        list_t *queue = ll_new_list(sizeof(int));
-
-        int root_inode = 2;
-        ll_append(queue, &root_inode); // enqueue the root;
-
-        breadth_search(queue, pt, check_dir);
-
-        ll_delete_list(queue);
 }
 
 // assume that we can fit into one block
@@ -190,7 +115,7 @@ int write_dirs(partition_t *pt, int inode_id, list_t *list)
         dir.rec_len = block_size - offset;
         memcpy(block_buf+offset, &dir, dir.rec_len);
 
-        print_block_content(block_buf);
+        //print_block_content(block_buf);
 
         struct ext2_inode *entry = get_inode_entry(pt, inode_id);
         int block_number = entry->i_block[0];
@@ -199,6 +124,111 @@ int write_dirs(partition_t *pt, int inode_id, list_t *list)
 
         free(block_buf);
         return 0;
+}
+
+int check_self_parent(partition_t *pt, int self_inode, int parent_inode)
+{
+        int need_write_back = 0;
+
+        struct ext2_dir_entry_2 self_dir;
+        struct ext2_dir_entry_2 parent_dir;
+
+        slice_t *s = get_child_dirs(pt, self_inode);
+        list_t *list = slice_to_list(s);
+
+        ll_pop(list, &self_dir);
+        ll_pop(list, &parent_dir);
+
+        if (parent_dir.inode != parent_inode) {
+                need_write_back = 1;
+                printf("parent ptr error\n");
+                if (parent_dir.name_len != 2 || strncmp(parent_dir.name, "..", 2) != 0) {
+                        ll_push(list, &parent_dir);
+                }
+                modify_dir(&parent_dir, parent_inode, "..", 2);
+        }
+
+        if (self_dir.inode != self_inode) {
+                need_write_back = 1;
+                printf("self ptr error\n");
+                if (self_dir.name_len != 1 || strncmp(self_dir.name, ".", 1) != 0) {
+                        ll_push(list, &self_dir);
+                }
+                modify_dir(&self_dir, self_inode, ".", 1);
+        }
+
+        ll_push(list, &parent_dir);
+        ll_push(list, &self_dir);
+
+        if (need_write_back) {
+                printf("writing back dir for inode %d\n", self_inode);
+                write_dirs(pt, self_inode, list);
+        }
+
+        ll_delete_list(list);
+        delete_slice(s);
+
+        return 0;
+}
+
+int check_dir(partition_t *pt, int inode_id)
+{
+        struct ext2_dir_entry_2 dir;
+        struct ext2_dir_entry_2 self_dir;
+        struct ext2_dir_entry_2 parent_dir;
+
+        slice_t *s = get_child_dirs(pt, inode_id);
+        list_t *list = slice_to_list(s);
+
+        if (inode_id == 2) { // root
+                int need_write_back = 0;
+
+                ll_pop(list, &self_dir);
+                ll_pop(list, &parent_dir);
+
+                if (strncmp(parent_dir.name, "..", 2) != 0) {
+                        need_write_back = 1;
+                        printf("root parent ptr error\n");
+                        ll_push(list, &parent_dir);
+                        modify_dir(&parent_dir, 2, "..", 2);
+                }
+
+                if (strncmp(self_dir.name, ".", 1) != 0) {
+                        need_write_back = 1;
+                        printf("root self ptr error\n");
+                        ll_push(list, &self_dir);
+                        modify_dir(&self_dir, 1, ".", 1);
+                }
+
+                if (need_write_back) {
+                        printf("writing back dir for inode %d\n", 2);
+                        write_dirs(pt, 2, list);
+                }
+        }
+
+        get(s, 0, &dir);
+        int parent_inode = dir.inode;
+        for (int i = 2; i < s->len; i++) {
+                get(s, i, &dir);
+                if (is_dir(pt, dir.inode)) {
+                        check_self_parent(pt, dir.inode, parent_inode);
+                }
+        }
+
+        free(s);
+        return 0;
+}
+
+void check_dir_ptrs(partition_t *pt)
+{
+        list_t *queue = ll_new_list(sizeof(int));
+
+        int root_inode = 2;
+        ll_append(queue, &root_inode); // enqueue the root;
+
+        breadth_search(queue, pt, check_dir);
+
+        ll_delete_list(queue);
 }
 
 int calloc_inode_book(partition_t *pt)
@@ -225,6 +255,10 @@ int mark_child_inodes_in_book(partition_t *pt, int inode)
 
 int fix_idle_inodes(partition_t *pt)
 {
+        // read in block;
+        // int [] for dirty bit
+        // block [] for modification
+
         // start from root
         for (int i = 2; i < book_size; i++) {
                 struct ext2_inode *entry = get_inode_entry(pt, i);
@@ -232,7 +266,12 @@ int fix_idle_inodes(partition_t *pt)
                         continue;
                 }
                 printf("found different inode %d: %d count %d\n", i, entry->i_links_count, inode_book[i]);
+                // modify entry and store it in block
+
         }
+
+        // check dirty bits and write back
+
         return 0;
 }
 

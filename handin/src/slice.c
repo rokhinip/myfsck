@@ -62,12 +62,29 @@ void delete_slice(slice_t *s)
         free(s);
 }
 
+list_t * slice_to_list(slice_t *s)
+{
+        void *item = malloc(s->item_size);
+        if (!item) {
+                error_at_line(-1, errno, __FILE__, __LINE__, NULL);
+        }
+
+        list_t *list = ll_new_list(s->item_size);
+        for (int i = 0; i < s->len; i++) {
+                get(s, i, item);
+                ll_append(list, item);
+        }
+        free(item);
+
+        return list;
+}
+
 #ifdef TESTSLICE
 
 int main(int argc, char *argv[])
 {
         slice_t *s = make_slice(5, sizeof(int));
-        
+
         for (int i = 0; i < 10; i++) {
                 append(s, &i);
         }
@@ -79,7 +96,24 @@ int main(int argc, char *argv[])
         }
         printf("slice len: %d cap: %d\n", s->len, s->cap);
         delete_slice(s);
-        
+
+        s = make_slice(5, sizeof(int));
+
+        for (int i = 0; i < 10; i++) {
+                append(s, &i);
+        }
+
+        list_t *list = slice_to_list(s);
+
+        int len = list->len;
+        for (int i = 0; i < len; i++) {
+                ll_pop(list, &item);
+                printf("link_list[%d] = %d\n", i, item);
+        }
+
+        ll_delete_list(list);
+        delete_slice(s);
+
         return 0;
 }
 

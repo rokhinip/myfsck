@@ -21,7 +21,7 @@ testlist: $(SRCDIR)/link_list.c
 	$(CC) -I$(IDIR) $(CFLAGS) -DTESTLINKLIST $(SRCDIR)/link_list.c -o testlist
 
 testslice: $(SRCDIR)/slice.c
-	$(CC) -I$(IDIR) $(CFLAGS) -DTESTSLICE $(SRCDIR)/slice.c -o testslice
+	$(CC) -I$(IDIR) $(CFLAGS) -DTESTSLICE $(SRCDIR)/slice.c $(SRCDIR)/link_list.c -o testslice
 
 myfsck: $(SRCDIR)/myfsck.c $(OBJ)
 	$(CC) -I$(IDIR) $(CFLAGS) $(OBJ) $(SRCDIR)/myfsck.c $(LIB) -o myfsck
