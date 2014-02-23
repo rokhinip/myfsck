@@ -60,19 +60,10 @@ static int get_logical_sect(int partition_number, int extended_base_sect, char *
 
 // read the partition entry into result,
 // read the beginning sector number of the partition into base_sector.
-int do_read_partition(char *disk, int partition_number, struct partition *result, int *base_sector)
+int do_read_partition(int partition_number, struct partition *result, int *base_sector)
 {
         int offset;
         char buf[sector_size_bytes];
-
-        if (partition_number <= 0) {
-                return -1;
-        }
-
-        device = open(disk, O_RDONLY);
-        if (device < 0) {
-                error_at_line(-1, errno, __FILE__, __LINE__, NULL);
-        }
 
         // read MBR
         read_sectors(0, 1, buf);
@@ -81,17 +72,15 @@ int do_read_partition(char *disk, int partition_number, struct partition *result
         if (partition_number <= 4) {
                 offset = partition_offset + partition_entry_size * (partition_number - 1);
                 if (result && base_sector) {
-                        memcpy(result, buf+offset, sizeof(*result));
+                        memcpy(result, buf+offset, sizeof(struct partition));
                         *base_sector = 0;
                 }
-                close(device);
                 return 0;
         }
 
         int extended_base_sect;
         int ret = get_extended_sect(buf, &extended_base_sect);
         if (ret < 0) {
-                close(device);
                 return -1;
         }
 
@@ -99,7 +88,6 @@ int do_read_partition(char *disk, int partition_number, struct partition *result
         int logical_base_sect = extended_base_sect;
         ret = get_logical_sect(partition_number, extended_base_sect, buf, &logical_base_sect);
         if (ret < 0) {
-                close(device);
                 return -1;
         }
 
@@ -107,25 +95,9 @@ int do_read_partition(char *disk, int partition_number, struct partition *result
         offset = partition_offset;
 
         if (result && base_sector) {
-                memcpy(result, buf+offset, sizeof(*result));
+                memcpy(result, buf+offset, sizeof(struct partition));
                 *base_sector = logical_base_sect;
         }
 
-        close(device);
-        return 0;
-}
-
-int do_print_partition(char *disk, int partition_number)
-{
-        int base_sector, ret;
-        struct partition p;
-
-        ret = do_read_partition(disk, partition_number, &p, &base_sector);
-        if (ret < 0) {
-                printf("-1\n");
-                return -1;
-        }
-
-        printf("0x%02x %d %d\n", p.sys_ind, p.start_sect + base_sector, p.nr_sects);
         return 0;
 }

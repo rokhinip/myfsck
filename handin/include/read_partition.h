@@ -3,6 +3,6 @@
 
 #include "genhd.h"
 
-int do_read_partition(char *disk, int partition_number, struct partition *result, int *base);
-int do_print_partition(char *disk, int partition_number);
+int do_read_partition(int partition_number, struct partition *result, int *base);
+
 #endif

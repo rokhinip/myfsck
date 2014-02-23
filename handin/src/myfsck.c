@@ -5,9 +5,10 @@
 #include <unistd.h>
 
 #include "myfsck.h"
-#include "readwrite.h"
-#include "read_partition.h"
-#include "read_superblock.h"
+#include "check.h"
+#include "disk.h"
+#include "util/partition.h"
+#include "util/printer.h"
 
 const char *optstring = "p:f:i:";
 const char *usage_strings[] = {"[-p <partition number>]",
@@ -30,6 +31,8 @@ int main(int argc, char *argv[])
         int partition_number, opt;
         char path_to_disk_image[256];
 
+        disk_t disk;
+
         if (argc < 5) {
                 print_usage(argv[0]);
         }
@@ -50,13 +53,21 @@ int main(int argc, char *argv[])
                 }
         }
 
+        // open the disk
+        open_disk(path_to_disk_image, &disk);
         // part I
         if (read_partition) {
-                do_print_partition(path_to_disk_image, partition_number);
+                print_partitions(&disk, partition_number);
         }
 
         // part II
-        print_and_verify_partition_info(path_to_disk_image, partition_number, 0);
+        //print_part2(&disk);
+
+        // part III
+
+        //print_dirs(disk.partitions[0]);
+        check_dir_ptrs(disk.partitions[2]);
+        check_inode_ptr(disk.partitions[2]);
 
         return 0;
 }
