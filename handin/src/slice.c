@@ -56,6 +56,17 @@ int get(slice_t *s, int i, void *item)
         return 0;
 }
 
+int set(slice_t *s, int i, void *item)
+{
+        if (i >= s->len) {
+                printf("index too big\n");
+                return -1;
+        }
+
+        memcpy(s->array+i*s->item_size, item, s->item_size);
+        return 0;
+}
+
 void delete_slice(slice_t *s)
 {
         free(s->array);
@@ -112,6 +123,21 @@ int main(int argc, char *argv[])
         }
 
         ll_delete_list(list);
+        delete_slice(s);
+
+        s = make_slice(5, sizeof(int));
+        for (int i = 0; i < 10; i++) {
+                append(s, &i);
+        }
+
+        for (int i = 0; i < 10; i++) {
+                set(s, 9-i, &i);
+        }
+        for (int i = 0; i < s->len; i++) {
+                get(s, i, &item);
+                printf("slice[%d] = %d\n", i, item);
+        }
+
         delete_slice(s);
 
         return 0;

@@ -66,8 +66,8 @@ int main(int argc, char *argv[])
         // part III
 
         //print_dirs(disk.partitions[0]);
-        check_dir_ptrs(disk.partitions[2]);
-        check_inode_ptr(disk.partitions[2]);
+        check_dir_ptrs(disk.partitions[5]);
+        check_inode_ptr(disk.partitions[5]);
 
         return 0;
 }

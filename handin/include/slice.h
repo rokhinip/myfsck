@@ -15,6 +15,7 @@ typedef struct slice_s {
 slice_t *make_slice(int cap, int item_size);
 int append(slice_t *s, void *item);
 int get(slice_t *s, int i, void *item);
+int set(slice_t *s, int i, void *item);
 void delete_slice(slice_t *s);
 list_t * slice_to_list(slice_t *s);
 

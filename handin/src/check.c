@@ -78,13 +78,18 @@ void print_dirs(partition_t *pt)
         ll_delete_list(queue);
 }
 
-int modify_dir(struct ext2_dir_entry_2 *dir, int inode_id, char *name, int name_len)
+static inline int compute_rec_len(struct ext2_dir_entry_2 *dir)
+{
+        return (8 + dir->name_len + 3) / 4 * 4; // hard_code
+}
+
+static int modify_dir(struct ext2_dir_entry_2 *dir, int inode_id, char *name, int name_len)
 {
         dir->inode = inode_id;
         dir->name_len = name_len;
         dir->file_type = EXT2_FT_DIR;
         strncpy(dir->name, name, name_len);
-        dir->rec_len = (8 + name_len + 3) / 4 * 4; // hard_code
+        dir->rec_len = compute_rec_len(dir);
         return 0;
 }
 
@@ -141,7 +146,7 @@ int check_self_parent(partition_t *pt, int self_inode, int parent_inode)
 
         if (parent_dir.inode != parent_inode) {
                 need_write_back = 1;
-                printf("parent ptr error\n");
+                printf("parent ptr error for inode %d\n", self_inode);
                 if (parent_dir.name_len != 2 || strncmp(parent_dir.name, "..", 2) != 0) {
                         ll_push(list, &parent_dir);
                 }
@@ -150,7 +155,7 @@ int check_self_parent(partition_t *pt, int self_inode, int parent_inode)
 
         if (self_dir.inode != self_inode) {
                 need_write_back = 1;
-                printf("self ptr error\n");
+                printf("self ptr error for inode %d\n", self_inode);
                 if (self_dir.name_len != 1 || strncmp(self_dir.name, ".", 1) != 0) {
                         ll_push(list, &self_dir);
                 }
@@ -253,11 +258,96 @@ int mark_child_inodes_in_book(partition_t *pt, int inode)
         return 0;
 }
 
+static int get_blocks_count_for_inodes(partition_t *pt)
+{
+        int inodes_per_block = get_block_size(pt) / sizeof(struct ext2_inode);
+        int inodes_per_group = get_inodes_per_group(pt);
+        int blocks_of_inodes_per_group = (inodes_per_group + (inodes_per_block - 1)) / inodes_per_block;
+        int total_blocks = blocks_of_inodes_per_group * pt->group_count;
+
+        return total_blocks;
+}
+
+static char ** allocate_inode_block(partition_t *pt) {
+        int inodes_per_block = get_block_size(pt) / sizeof(struct ext2_inode);
+        int inodes_per_group = get_inodes_per_group(pt);
+        int blocks_of_inodes_per_group = (inodes_per_group + (inodes_per_block - 1)) / inodes_per_block;
+        int total_blocks = blocks_of_inodes_per_group * pt->group_count;
+
+        char ** block_group = malloc(sizeof(char *) * total_blocks);
+        if (!block_group) {
+                error_at_line(-1, errno, __FILE__, __LINE__, NULL);
+        }
+
+        for (int i = 0; i < pt->group_count; i++) {
+                int table_id_started = get_inode_table_bid(pt->groups[i]);
+                for (int j = 0; j < blocks_of_inodes_per_group; j++) {
+                        block_group[i*blocks_of_inodes_per_group+j] = read_block(pt, table_id_started+j, 1);
+                }
+        }
+
+        return block_group;
+}
+
+static int index_to_bid(partition_t *pt, int index)
+{
+        int inodes_per_block = get_block_size(pt) / sizeof(struct ext2_inode);
+        int inodes_per_group = get_inodes_per_group(pt);
+        int blocks_of_inodes_per_group = (inodes_per_group + (inodes_per_block - 1)) / inodes_per_block;
+
+        int group_number = index / blocks_of_inodes_per_group;
+        int block_offset = index % blocks_of_inodes_per_group;
+
+        int block_start = get_inode_table_bid(pt->groups[group_number]);
+
+        return block_start + block_offset;
+}
+
+static int modify_inode_block_array(partition_t *pt, char **block_array,
+                                    int *dirty_array, int inode_id, struct ext2_inode *entry)
+{
+        int inode_entry_per_block = get_block_size(pt) / sizeof(struct ext2_inode);
+
+        int block_index = (inode_id - 1) / inode_entry_per_block;
+        int offset_in_block = (inode_id - 1) % inode_entry_per_block * sizeof(struct ext2_inode);
+
+        //struct ext2_inode old_entry;
+        //memcpy(&old_entry, block_array[block_index]+offset_in_block, sizeof(struct ext2_inode));
+        //printf("old links count %d\n", old_entry.i_links_count);
+
+        memcpy(block_array[block_index]+offset_in_block, entry, sizeof(struct ext2_inode));
+        dirty_array[block_index] = 1;
+
+        return 0;
+}
+
+static int create_lost_dir(struct ext2_dir_entry_2 *lost_dir, int inode)
+{
+        lost_dir->inode = inode;
+        sprintf(lost_dir->name, "%d", inode);
+        lost_dir->file_type = EXT2_FT_REG_FILE;
+        lost_dir->name_len = strlen(lost_dir->name);
+        lost_dir->rec_len = compute_rec_len(lost_dir);
+
+        return 0;
+}
+
 int fix_idle_inodes(partition_t *pt)
 {
-        // read in block;
-        // int [] for dirty bit
-        // block [] for modification
+        int add_lost_found = 0;
+
+        struct ext2_dir_entry_2 lost_dir;
+        int lost_found_inode = get_lost_found_inode(pt);
+        slice_t *lost_found = get_child_dirs(pt, lost_found_inode);
+        int old_last_dir_index = lost_found->len - 1;
+
+        char **block_array = allocate_inode_block(pt);
+
+        int total_blocks = get_blocks_count_for_inodes(pt);
+        int *dirty_array = malloc(sizeof(int) * total_blocks);
+        if (!dirty_array) {
+                error_at_line(-1, errno, __FILE__, __LINE__, NULL);
+        }
 
         // start from root
         for (int i = 2; i < book_size; i++) {
@@ -266,13 +356,45 @@ int fix_idle_inodes(partition_t *pt)
                         continue;
                 }
                 printf("found different inode %d: %d count %d\n", i, entry->i_links_count, inode_book[i]);
+                if (entry->i_links_count > 0 && inode_book[i] == 0) {
+                        // lost and found
+                        create_lost_dir(&lost_dir, i);
+                        append(lost_found, &lost_dir);
+                        add_lost_found = 1;
+                }
+                entry->i_links_count = inode_book[i];
+                modify_inode_block_array(pt, block_array, dirty_array, i, entry);
                 // modify entry and store it in block
-
         }
 
-        // check dirty bits and write back
+        for (int i = 0; i < total_blocks; i++) {
+                if (dirty_array[i]) {
+                        //printf("%d \n", index_to_bid(pt, i));
+                        write_block(pt, index_to_bid(pt, i), 1, block_array[i]);
+                }
+        }
 
-        return 0;
+        if (add_lost_found) {
+                // modify the rec_len of the last dir
+                struct ext2_dir_entry_2 old_last;
+                get(lost_found, old_last_dir_index, &old_last);
+                old_last.rec_len = compute_rec_len(&old_last);
+                set(lost_found, old_last_dir_index, &old_last);
+
+                list_t *list = slice_to_list(lost_found);
+                write_dirs(pt, lost_found_inode, list);
+                free(list);
+        }
+
+        free(lost_found);
+        free(dirty_array);
+
+        for (int i = 0; i < total_blocks; i++) {
+                free(block_array[i]);
+        }
+        free(block_array);
+
+        return add_lost_found;
 }
 
 int check_inode_ptr(partition_t *pt)
@@ -294,7 +416,11 @@ int check_inode_ptr(partition_t *pt)
         //        }
         //}
 
-        fix_idle_inodes(pt);
+        int ret = fix_idle_inodes(pt);
+        if (ret != 0) {
+                check_dir_ptrs(pt);
+                check_inode_ptr(pt);
+        }
 
         return 0;
 }
