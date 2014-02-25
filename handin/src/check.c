@@ -13,6 +13,9 @@
 static int *inode_book;
 static int book_size;
 
+static int *block_book;
+static int block_num;
+
 int breadth_search(list_t* queue, partition_t *pt,
                    int (*func)(partition_t*, int))
 {
@@ -53,7 +56,6 @@ int breadth_search(list_t* queue, partition_t *pt,
 int print_dir(partition_t *pt, int inode_id)
 {
         printf("inode %d\n", inode_id);
-        return 0;
         if (inode_id == 0) {
                 printf("\n");
                 return 0;
@@ -253,8 +255,12 @@ int mark_child_inodes_in_book(partition_t *pt, int inode)
         for (int i = 0; i < s->len; i++) {
                 int inode_id;
                 get(s, i, &inode_id);
+                if (inode_id >= book_size) {
+                        continue;
+                }
                 inode_book[inode_id]++;
         }
+        delete_slice(s);
         return 0;
 }
 
@@ -321,13 +327,41 @@ static int modify_inode_block_array(partition_t *pt, char **block_array,
         return 0;
 }
 
-static int create_lost_dir(struct ext2_dir_entry_2 *lost_dir, int inode)
+static inline int get_file_type(int imode)
 {
+        if ((imode & EXT2_S_IFSOCK) == EXT2_S_IFSOCK) {
+                return EXT2_FT_SOCK;
+        }
+        if ((imode & EXT2_S_IFLNK) == EXT2_S_IFLNK) {
+                return EXT2_FT_SYMLINK;
+        }
+        if ((imode & EXT2_S_IFREG) == EXT2_S_IFREG) {
+                return EXT2_FT_REG_FILE;
+        }
+        if ((imode & EXT2_S_IFBLK) == EXT2_S_IFBLK) {
+                return EXT2_FT_BLKDEV;
+        }
+        if ((imode & EXT2_S_IFDIR) == EXT2_S_IFDIR) {
+                return EXT2_FT_DIR;
+        }
+        if ((imode & EXT2_S_IFCHR) == EXT2_S_IFCHR) {
+                return EXT2_FT_CHRDEV;
+        }
+        if ((imode & EXT2_S_IFIFO) == EXT2_S_IFIFO) {
+                return EXT2_FT_FIFO;
+        }
+        return EXT2_FT_UNKNOWN;
+}
+
+static int create_lost_dir(partition_t *pt, struct ext2_dir_entry_2 *lost_dir, int inode)
+{
+        struct ext2_inode *entry = get_inode_entry(pt, inode);
+
         lost_dir->inode = inode;
         sprintf(lost_dir->name, "%d", inode);
-        lost_dir->file_type = EXT2_FT_REG_FILE;
         lost_dir->name_len = strlen(lost_dir->name);
         lost_dir->rec_len = compute_rec_len(lost_dir);
+        lost_dir->file_type = get_file_type(entry->i_mode);
 
         return 0;
 }
@@ -358,7 +392,7 @@ int fix_idle_inodes(partition_t *pt)
                 printf("found different inode %d: %d count %d\n", i, entry->i_links_count, inode_book[i]);
                 if (entry->i_links_count > 0 && inode_book[i] == 0) {
                         // lost and found
-                        create_lost_dir(&lost_dir, i);
+                        create_lost_dir(pt, &lost_dir, i);
                         append(lost_found, &lost_dir);
                         add_lost_found = 1;
                 }
@@ -421,6 +455,105 @@ int check_inode_ptr(partition_t *pt)
                 check_dir_ptrs(pt);
                 check_inode_ptr(pt);
         }
+
+        return 0;
+}
+
+//
+// check block alloction bitmap
+//
+static int alloc_block_book(partition_t *pt)
+{
+        block_num = get_blocks_per_group(pt)*(pt->group_count);
+        block_book = calloc(1, sizeof(int) * block_num);
+        if (!block_book) {
+                error_at_line(-1, errno, __FILE__, __LINE__, NULL);
+        }
+
+        int blocks_for_inode_in_group = get_blocks_count_for_inodes(pt) / pt->group_count;
+        int group_size = get_blocks_per_group(pt);
+        for (int i = 0; i < pt->group_count; i++) {
+                for (int j = group_size*i; j < blocks_for_inode_in_group + get_inode_table_bid(pt->groups[i]); j++) {
+                        block_book[j] = 1;
+                }
+        }
+
+        return 0;
+}
+
+int cnt = 0;
+int cc = 0;
+
+static int mark_child_blocks_in_book(partition_t *pt, int inode)
+{
+        int i, j;
+        int inode_id, block_id;
+        slice_t *child_slice, *blocks;
+
+        child_slice = get_child_inodes(pt, inode);
+        for (i = 0; i < child_slice->len; i++) {
+                get(child_slice, i, &inode_id);
+
+                //printf("child inode_id %d\n", inode_id);
+                if (inode_id > book_size) {
+                        continue;
+                }
+                if (is_symbol(pt, inode_id)) {
+                        // do not count symbolic link
+                        continue;
+                }
+
+                blocks = get_blocks(pt, inode_id);
+
+                for (j = 0; j < blocks->len; j++) {
+                        get(blocks, j, &block_id);
+                        block_book[block_id] = 1;
+                }
+                delete_slice(blocks);
+        }
+
+        delete_slice(child_slice);
+        return 0;
+}
+
+static int fix_block_bitmap(partition_t *pt)
+{
+        int n = 0;
+        for (int i = 0; i < block_num; i++) {
+                if (block_book[i] == 1) {
+                        n++;
+                        //printf("block bitmap not consistent, count: %d, in map: %d\n", block_book[i], block_allocated(pt, i));
+                }
+        }
+
+        int total_free = get_free_blocks_count(pt->groups[0]) + get_free_blocks_count(pt->groups[1]) + get_free_blocks_count(pt->groups[2]);
+        printf("n %d, total %d\n", n, total_free);
+        return 0;
+}
+
+int check_block_bitmap(partition_t *pt)
+{
+        alloc_block_book(pt);
+
+        list_t *queue = ll_new_list(sizeof(int));
+
+        int root_inode = 2;
+        slice_t *blocks = get_blocks(pt, 2);
+        for (int j = 0; j < blocks->len; j++) {
+                int block_id;
+                get(blocks, j, &block_id);
+                block_book[block_id] = 1;
+        }
+
+        ll_append(queue, &root_inode); // enqueue the root;
+
+        breadth_search(queue, pt, mark_child_blocks_in_book);
+
+        ll_delete_list(queue);
+
+        fix_block_bitmap(pt);
+        printf("cnt %d\n", cnt);
+        printf("cc %d\n", cc);
 
         return 0;
 }

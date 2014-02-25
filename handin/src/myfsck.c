@@ -65,9 +65,13 @@ int main(int argc, char *argv[])
 
         // part III
 
-        //print_dirs(disk.partitions[0]);
         check_dir_ptrs(disk.partitions[5]);
         check_inode_ptr(disk.partitions[5]);
+        //check_block_bitmap(disk.partitions[2]);
+        //print_ls(disk.partitions[0], "/.");
+        //printf("total %d, free %d\n", disk.partitions[0]->super_block->s_blocks_count, disk.partitions[0]->super_block->s_free_blocks_count);
+        //
+        //printf("total inodes %d, free inodes %d, used %d\n", disk.partitions[0]->super_block->s_inodes_count, disk.partitions[0]->super_block->s_free_inodes_count, disk.partitions[0]->super_block->s_inodes_count - disk.partitions[0]->super_block->s_free_inodes_count);
 
         return 0;
 }

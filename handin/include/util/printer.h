@@ -4,6 +4,7 @@
 #include "ext2_fs.h"
 #include "disk.h"
 
+void verify_block_allocated(partition_t *pt, int group_number);
 void print_partitions(disk_t *disk, int partition_number);
 void print_all_groups_desc(disk_t *disk);
 void verify_all_blocks_allocated(disk_t *disk);

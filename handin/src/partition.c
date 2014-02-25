@@ -259,10 +259,10 @@ slice_t * get_blocks(partition_t *pt, int inode_id)
                 }
                 append(slice, &inode->i_block[i]);
         }
-
         if (get_indirect_block(slice, pt, inode->i_block[12]) == 0) {
                 return slice;
         }
+
         if (get_double_indirect_block(slice, pt, inode->i_block[13]) == 0) {
                 return slice;
         }
