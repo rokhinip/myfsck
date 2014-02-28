@@ -169,13 +169,13 @@ struct ext2_inode * get_inode_entry(partition_t *pt, int inode_id)
 int is_dir(partition_t *pt, int inode_id)
 {
         struct ext2_inode *inode = get_inode_entry(pt, inode_id);
-        return (inode->i_mode & EXT2_S_IFDIR) != 0;
+        return (inode->i_mode & EXT2_S_IFDIR) == EXT2_S_IFDIR;
 }
 
 int is_symbol(partition_t *pt, int inode_id)
 {
         struct ext2_inode *inode = get_inode_entry(pt, inode_id);
-        return (inode->i_mode & EXT2_S_IFLNK) != 0;
+        return (inode->i_mode & EXT2_S_IFLNK) == EXT2_S_IFLNK;
 }
 
 int get_dir(partition_t *pt, int inode_id, struct ext2_dir_entry_2 *dir)
@@ -262,7 +262,6 @@ slice_t * get_blocks(partition_t *pt, int inode_id)
         if (get_indirect_block(slice, pt, inode->i_block[12]) == 0) {
                 return slice;
         }
-
         if (get_double_indirect_block(slice, pt, inode->i_block[13]) == 0) {
                 return slice;
         }
