@@ -464,7 +464,7 @@ int check_inode_ptr(partition_t *pt)
 //
 static int alloc_block_book(partition_t *pt)
 {
-        block_num = get_blocks_per_group(pt)*(pt->group_count);
+        block_num = pt->super_block->s_blocks_count;
         block_book = calloc(1, sizeof(int) * block_num);
         if (!block_book) {
                 error_at_line(-1, errno, __FILE__, __LINE__, NULL);
@@ -481,9 +481,6 @@ static int alloc_block_book(partition_t *pt)
         return 0;
 }
 
-int cnt = 0;
-int cc = 0;
-
 static int mark_child_blocks_in_book(partition_t *pt, int inode)
 {
         int i, j;
@@ -498,12 +495,13 @@ static int mark_child_blocks_in_book(partition_t *pt, int inode)
                 if (inode_id > book_size) {
                         continue;
                 }
+
                 if (is_symbol(pt, inode_id)) {
                         // do not count symbolic link
                         continue;
                 }
 
-                blocks = get_blocks(pt, inode_id);
+                blocks = get_allocated_blocks(pt, inode_id);
 
                 for (j = 0; j < blocks->len; j++) {
                         get(blocks, j, &block_id);
@@ -518,16 +516,25 @@ static int mark_child_blocks_in_book(partition_t *pt, int inode)
 
 static int fix_block_bitmap(partition_t *pt)
 {
-        int n = 0;
         for (int i = 0; i < block_num; i++) {
-                if (block_book[i] == 1) {
-                        n++;
-                        //printf("block bitmap not consistent, count: %d, in map: %d\n", block_book[i], block_allocated(pt, i));
+                if (block_book[i] != block_allocated(pt, i)) {
+                        printf("block bitmap not consistent, count: %d, in map: %d, block %d\n", block_book[i], block_allocated(pt, i), i);
                 }
         }
 
-        int total_free = get_free_blocks_count(pt->groups[0]) + get_free_blocks_count(pt->groups[1]) + get_free_blocks_count(pt->groups[2]);
-        printf("n %d, total %d\n", n, total_free);
+        int total = 0;
+        for (int i = 0; i < block_num; i++) {
+                if (block_book[i] == 1) {
+                        total++;
+                }
+        }
+        printf("total used %d / %d\n", total, block_num);
+        printf("reserved blocks %d / %d\n", pt->super_block->s_r_blocks_count, pt->super_block->s_blocks_count);
+
+        //int total_free = get_free_blocks_count(pt->groups[0]) + get_free_blocks_count(pt->groups[1]) + get_free_blocks_count(pt->groups[2]);
+        //printf("n %d, total %d\n", n, total_free);
+        //printf("tottttal block true %d\n", block_num);
+        //printf("totoal used %d\n", block_num - total_free);
         return 0;
 }
 
@@ -552,8 +559,6 @@ int check_block_bitmap(partition_t *pt)
         ll_delete_list(queue);
 
         fix_block_bitmap(pt);
-        printf("cnt %d\n", cnt);
-        printf("cc %d\n", cc);
 
         return 0;
 }

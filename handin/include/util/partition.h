@@ -24,6 +24,7 @@ int get_free_inodes_count(group_t *g);
 struct ext2_inode * get_inode_entry(partition_t *pt, int inode_id);
 int get_dir(partition_t *pt, int inode_id, struct ext2_dir_entry_2 *dir);
 slice_t * get_blocks(partition_t *pt, int inode_id);
+slice_t * get_allocated_blocks(partition_t *pt, int inode);
 slice_t * get_child_inodes(partition_t *pt, int inode_id);
 slice_t * get_child_dirs(partition_t *pt, int inode_id);
 int get_lost_found_inode(partition_t *pt);

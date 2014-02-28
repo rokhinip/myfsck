@@ -64,10 +64,13 @@ int main(int argc, char *argv[])
         //print_part2(&disk);
 
         // part III
+        
 
-        check_dir_ptrs(disk.partitions[5]);
-        check_inode_ptr(disk.partitions[5]);
-        //check_block_bitmap(disk.partitions[2]);
+        check_dir_ptrs(disk.partitions[0]);
+        check_inode_ptr(disk.partitions[0]);
+        check_block_bitmap(disk.partitions[0]);
+
+        //get_blocks(disk.partitions[0], 11);
         //print_ls(disk.partitions[0], "/.");
         //printf("total %d, free %d\n", disk.partitions[0]->super_block->s_blocks_count, disk.partitions[0]->super_block->s_free_blocks_count);
         //

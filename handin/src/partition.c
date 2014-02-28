@@ -253,19 +253,19 @@ slice_t * get_blocks(partition_t *pt, int inode_id)
 
         slice_t *slice = make_slice(cap, sizeof(int));
 
-        for (int i = 0; i < 12; i++) {
+        for (int i = 0; i < EXT2_NDIR_BLOCKS; i++) {
                 if (inode->i_block[i] == 0) {
                         return slice;
                 }
                 append(slice, &inode->i_block[i]);
         }
-        if (get_indirect_block(slice, pt, inode->i_block[12]) == 0) {
+        if (get_indirect_block(slice, pt, inode->i_block[EXT2_IND_BLOCK]) == 0) {
                 return slice;
         }
-        if (get_double_indirect_block(slice, pt, inode->i_block[13]) == 0) {
+        if (get_double_indirect_block(slice, pt, inode->i_block[EXT2_DIND_BLOCK]) == 0) {
                 return slice;
         }
-        get_triple_indirect_block(slice, pt, inode->i_block[14]);
+        get_triple_indirect_block(slice, pt, inode->i_block[EXT2_TIND_BLOCK]);
 
         return slice;
 }
@@ -367,4 +367,55 @@ int get_lost_found_inode(partition_t *pt)
         }
         printf("warning: no lost+found\n");
         return 0;
+}
+
+slice_t * get_allocated_blocks(partition_t *pt, int inode)
+{
+        int *block_buf;
+        int *second_block_buf;
+
+        slice_t *s = get_blocks(pt, inode);
+        struct ext2_inode *entry = get_inode_entry(pt, inode);
+
+        if (entry->i_block[EXT2_IND_BLOCK] != 0) {
+                // one block for indirect block
+                append(s, &entry->i_block[EXT2_IND_BLOCK]);
+        }
+        if (entry->i_block[EXT2_DIND_BLOCK] != 0) {
+                // one block for the double-indirect block
+                append(s, &entry->i_block[EXT2_DIND_BLOCK]);
+
+                int i = 0;
+                block_buf = (int *)read_block(pt, entry->i_block[EXT2_DIND_BLOCK], 1);
+                // one block for each indirect block pointed by the double-indirect block
+                while (block_buf[i] != 0) {
+                        append(s, &block_buf[i]);
+                        i++;
+                }
+                free(block_buf);
+        }
+        if (entry->i_block[EXT2_TIND_BLOCK] != 0) {
+                // one block for triple block
+                append(s, &entry->i_block[EXT2_TIND_BLOCK]);
+
+                int i = 0;
+                int j = 0;
+                block_buf = (int *)read_block(pt, entry->i_block[EXT2_DIND_BLOCK], 1);
+                while (block_buf[i] != 0) {
+                        // one block for each double-indirect block pointed by the triple-indirect block
+                        append(s, &block_buf[i]);
+
+                        second_block_buf = (int *)read_block(pt, block_buf[i], 1);
+                        while (second_block_buf[j] != 0) {
+                                // one block for each triple-indirect block pointed by the double-indirect block
+                                append(s, &second_block_buf[j]);
+                                j++;
+                        }
+                        
+                        i++;
+                }
+                free(block_buf);
+                free(second_block_buf);
+        }
+        return s;
 }
