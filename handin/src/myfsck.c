@@ -15,6 +15,8 @@ const char *usage_strings[] = {"[-p <partition number>]",
                                "[-f <partition number>]",
                                "[-i /path/to/disk/image/]"};
 
+int pass = 0;
+
 void print_usage(char *name)
 {
         printf("usage: %s ", name);
@@ -27,7 +29,10 @@ void print_usage(char *name)
 
 int main(int argc, char *argv[])
 {
-        char read_partition = 0;
+        int read_partition = 0;
+        int fix_partition = 0;
+
+        int fix_partition_number;
         int partition_number, opt;
         char path_to_disk_image[256];
 
@@ -50,6 +55,14 @@ int main(int argc, char *argv[])
                         }
                         strncpy(path_to_disk_image, optarg, sizeof(path_to_disk_image));
                         break;
+                case 'f':
+                        fix_partition_number = atoi(optarg);
+                        if (fix_partition_number < 0) {
+                                printf("wrong partition number %d\n", fix_partition_number);
+                                return -1;
+                        }
+                        fix_partition = 1;
+                        break;
                 }
         }
 
@@ -64,17 +77,28 @@ int main(int argc, char *argv[])
         //print_part2(&disk);
 
         // part III
-        
 
-        check_dir_ptrs(disk.partitions[0]);
-        check_inode_ptr(disk.partitions[0]);
-        check_block_bitmap(disk.partitions[0]);
+        if (!fix_partition) {
+                return 0;
+        }
 
-        //get_blocks(disk.partitions[0], 11);
-        //print_ls(disk.partitions[0], "/.");
-        //printf("total %d, free %d\n", disk.partitions[0]->super_block->s_blocks_count, disk.partitions[0]->super_block->s_free_blocks_count);
-        //
-        //printf("total inodes %d, free inodes %d, used %d\n", disk.partitions[0]->super_block->s_inodes_count, disk.partitions[0]->super_block->s_free_inodes_count, disk.partitions[0]->super_block->s_inodes_count - disk.partitions[0]->super_block->s_free_inodes_count);
+        if (fix_partition_number == 0) {
+                for (int i = 0; i < disk.partition_count; i++) {
+                        pass = 0;
+                        if (is_ext2_partition(disk.partitions[i])) {
+                                do_check(disk.partitions[i]);
+                        }
+                }
+                return 0;
+        }
+
+        if (!is_ext2_partition(disk.partitions[fix_partition_number-1])) {
+                printf("Trying to run fsck on an invalid partition\n");
+                return -1;
+        }
+
+        pass = 0;
+        do_check(disk.partitions[fix_partition_number-1]);
 
         return 0;
 }

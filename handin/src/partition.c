@@ -121,8 +121,7 @@ int get_free_inodes_count(group_t *g)
 // test if the inode/block is allocated in the bitmap
 static inline int allocated(char *map, int offset)
 {
-        // [*] offset is the inode number's offset in
-        // one group, it starts from 0
+        // [*] offset starts from 0
         int byte_offset = offset / 8;
         int bit_offset = offset % 8;
 
@@ -135,9 +134,9 @@ int block_allocated(partition_t *pt, int block_number)
         // get inodes_per_group
         int blocks_per_group = get_blocks_per_group(pt);
 
-        // block start from 0
-        int group_number = block_number / blocks_per_group;
-        int block_offset_in_group = block_number % blocks_per_group;
+        // block map start from 1
+        int group_number = (block_number - 1) / blocks_per_group;
+        int block_offset_in_group = (block_number - 1) % blocks_per_group;
 
         return allocated(pt->groups[group_number]->block_bitmap, block_offset_in_group);
 }
@@ -411,7 +410,7 @@ slice_t * get_allocated_blocks(partition_t *pt, int inode)
                                 append(s, &second_block_buf[j]);
                                 j++;
                         }
-                        
+
                         i++;
                 }
                 free(block_buf);

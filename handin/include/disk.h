@@ -40,5 +40,6 @@ typedef struct disk_s {
 
 // open a disk
 int open_disk(char *path, disk_t *disk);
+int is_ext2_partition(partition_t *pt);
 
 #endif

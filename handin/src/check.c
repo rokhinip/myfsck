@@ -10,11 +10,21 @@
 #include "util/partition.h"
 #include "util/printer.h"
 
+#include "readwrite.h"
+
+#define MAP_UNIT_SIZE 8
+#define SET_BIT(map, offset) ((map)[((offset)-1) / MAP_UNIT_SIZE] = (map)[((offset)-1) / MAP_UNIT_SIZE] | (0x1 << (((offset)-1) % MAP_UNIT_SIZE)))
+#define CLR_BIT(map, offset) ((map)[((offset)-1) / MAP_UNIT_SIZE] = (map)[((offset)-1) / MAP_UNIT_SIZE] & ~(0x1 << (((offset)-1) % MAP_UNIT_SIZE)))
+
+#define GET_BIT(map, offset) (((map)[((offset)-1) / MAP_UNIT_SIZE] >> (((offset)-1) % MAP_UNIT_SIZE)) & 0x1)
+
 static int *inode_book;
 static int book_size;
 
-static int *block_book;
+static char *block_bmap;
 static int block_num;
+
+extern int pass;
 
 int breadth_search(list_t* queue, partition_t *pt,
                    int (*func)(partition_t*, int))
@@ -148,7 +158,9 @@ int check_self_parent(partition_t *pt, int self_inode, int parent_inode)
 
         if (parent_dir.inode != parent_inode) {
                 need_write_back = 1;
-                printf("parent ptr error for inode %d\n", self_inode);
+                if (pass == 1) {
+                        printf("parent ptr error for inode %d\n", self_inode);
+                }
                 if (parent_dir.name_len != 2 || strncmp(parent_dir.name, "..", 2) != 0) {
                         ll_push(list, &parent_dir);
                 }
@@ -157,7 +169,9 @@ int check_self_parent(partition_t *pt, int self_inode, int parent_inode)
 
         if (self_dir.inode != self_inode) {
                 need_write_back = 1;
-                printf("self ptr error for inode %d\n", self_inode);
+                if (pass == 1) {
+                        printf("self ptr error for inode %d\n", self_inode);
+                }
                 if (self_dir.name_len != 1 || strncmp(self_dir.name, ".", 1) != 0) {
                         ll_push(list, &self_dir);
                 }
@@ -168,8 +182,10 @@ int check_self_parent(partition_t *pt, int self_inode, int parent_inode)
         ll_push(list, &self_dir);
 
         if (need_write_back) {
-                printf("writing back dir for inode %d\n", self_inode);
                 write_dirs(pt, self_inode, list);
+                if (pass == 1) {
+                        printf("fixed\n");
+                }
         }
 
         ll_delete_list(list);
@@ -195,21 +211,29 @@ int check_dir(partition_t *pt, int inode_id)
 
                 if (strncmp(parent_dir.name, "..", 2) != 0) {
                         need_write_back = 1;
-                        printf("root parent ptr error\n");
+                        if (pass == 1) {
+                                printf("root parent ptr error\n");
+                        }
+
                         ll_push(list, &parent_dir);
                         modify_dir(&parent_dir, 2, "..", 2);
                 }
 
                 if (strncmp(self_dir.name, ".", 1) != 0) {
                         need_write_back = 1;
-                        printf("root self ptr error\n");
+                        if (pass == 1) {
+                                printf("root self ptr error\n");
+                        }
+
                         ll_push(list, &self_dir);
                         modify_dir(&self_dir, 1, ".", 1);
                 }
 
                 if (need_write_back) {
-                        printf("writing back dir for inode %d\n", 2);
                         write_dirs(pt, 2, list);
+                        if (pass == 1) {
+                                printf("fixed\n");
+                        }
                 }
         }
 
@@ -228,6 +252,10 @@ int check_dir(partition_t *pt, int inode_id)
 
 void check_dir_ptrs(partition_t *pt)
 {
+        if (pass == 1) {
+                printf("Pass %d: Checking directory structure\n", pass);
+        }
+
         list_t *queue = ll_new_list(sizeof(int));
 
         int root_inode = 2;
@@ -240,7 +268,7 @@ void check_dir_ptrs(partition_t *pt)
 
 int calloc_inode_book(partition_t *pt)
 {
-        book_size = get_inodes_per_group(pt)*(pt->group_count) + 1;
+        book_size = pt->super_block->s_inodes_count + 1;
         inode_book = calloc(1, sizeof(int) * book_size);
         if (!inode_book) {
                 error_at_line(-1, errno, __FILE__, __LINE__, NULL);
@@ -264,15 +292,24 @@ int mark_child_inodes_in_book(partition_t *pt, int inode)
         return 0;
 }
 
-static int get_blocks_count_for_inodes(partition_t *pt)
-{
-        int inodes_per_block = get_block_size(pt) / sizeof(struct ext2_inode);
-        int inodes_per_group = get_inodes_per_group(pt);
-        int blocks_of_inodes_per_group = (inodes_per_group + (inodes_per_block - 1)) / inodes_per_block;
-        int total_blocks = blocks_of_inodes_per_group * pt->group_count;
-
-        return total_blocks;
-}
+// group id starts from 0
+//static int get_blocks_count_for_inodes_in_group(partition_t *pt, int group_id)
+//{
+//        int inodes_in_group;
+//        int inodes_per_block = get_block_size(pt) / sizeof(struct ext2_inode);
+//
+//        int count = pt->super_block->s_inodes_count / pt->super_block->s_inodes_per_group / (group_id + 1);
+//        printf("pt->super %d pt->per goup %d id %d\n, count", pt->super_block->s_inodes_count, pt->super_block->s_inodes_per_group, group_id);
+//        if (count > 0) {
+//                inodes_in_group = pt->super_block->s_inodes_per_group;
+//        } else {
+//                inodes_in_group = pt->super_block->s_inodes_count % pt->super_block->s_inodes_per_group;
+//        }
+//
+//        int blocks_of_inodes_in_group = (inodes_in_group + (inodes_per_block - 1)) / inodes_per_block;
+//
+//        return blocks_of_inodes_in_group;
+//}
 
 static char ** allocate_inode_block(partition_t *pt) {
         int inodes_per_block = get_block_size(pt) / sizeof(struct ext2_inode);
@@ -368,6 +405,11 @@ static int create_lost_dir(partition_t *pt, struct ext2_dir_entry_2 *lost_dir, i
 
 int fix_idle_inodes(partition_t *pt)
 {
+        pass++;
+        if (pass == 3) {
+                printf("Pass 3: Checking directory connectivity\n");
+        }
+
         int add_lost_found = 0;
 
         struct ext2_dir_entry_2 lost_dir;
@@ -375,10 +417,14 @@ int fix_idle_inodes(partition_t *pt)
         slice_t *lost_found = get_child_dirs(pt, lost_found_inode);
         int old_last_dir_index = lost_found->len - 1;
 
+        int inodes_per_block = get_block_size(pt) / sizeof(struct ext2_inode);
+        int inodes_per_group = get_inodes_per_group(pt);
+        int blocks_of_inodes_per_group = (inodes_per_group + (inodes_per_block - 1)) / inodes_per_block;
+        int total_blocks = blocks_of_inodes_per_group * pt->group_count;
+
         char **block_array = allocate_inode_block(pt);
 
-        int total_blocks = get_blocks_count_for_inodes(pt);
-        int *dirty_array = malloc(sizeof(int) * total_blocks);
+        int *dirty_array = calloc(1, sizeof(int) * total_blocks);
         if (!dirty_array) {
                 error_at_line(-1, errno, __FILE__, __LINE__, NULL);
         }
@@ -389,9 +435,12 @@ int fix_idle_inodes(partition_t *pt)
                 if (entry->i_links_count == inode_book[i]) {
                         continue;
                 }
-                printf("found different inode %d: %d count %d\n", i, entry->i_links_count, inode_book[i]);
+                if (pass == 3) {
+                        printf("Inode %d ref count is %d, should be %d.\n", i, entry->i_links_count, inode_book[i]);
+                }
                 if (entry->i_links_count > 0 && inode_book[i] == 0) {
                         // lost and found
+                        printf("Unconnected directory inode %d\n", i);
                         create_lost_dir(pt, &lost_dir, i);
                         append(lost_found, &lost_dir);
                         add_lost_found = 1;
@@ -433,6 +482,10 @@ int fix_idle_inodes(partition_t *pt)
 
 int check_inode_ptr(partition_t *pt)
 {
+        if (pass == 2) {
+                printf("Pass 2: Checking directory connectivity\n");
+        }
+
         calloc_inode_book(pt);
 
         list_t *queue = ll_new_list(sizeof(int));
@@ -455,29 +508,19 @@ int check_inode_ptr(partition_t *pt)
                 check_dir_ptrs(pt);
                 check_inode_ptr(pt);
         }
-
         return 0;
 }
 
 //
-// check block alloction bitmap
+// check block allocation bitmap
 //
-static int alloc_block_book(partition_t *pt)
+static int alloc_block_bitmap(partition_t *pt)
 {
-        block_num = pt->super_block->s_blocks_count;
-        block_book = calloc(1, sizeof(int) * block_num);
-        if (!block_book) {
+        block_num = get_block_size(pt) * pt->group_count * MAP_UNIT_SIZE;
+        block_bmap = (char *)calloc(sizeof(char), block_num / MAP_UNIT_SIZE);
+        if (!block_bmap) {
                 error_at_line(-1, errno, __FILE__, __LINE__, NULL);
         }
-
-        int blocks_for_inode_in_group = get_blocks_count_for_inodes(pt) / pt->group_count;
-        int group_size = get_blocks_per_group(pt);
-        for (int i = 0; i < pt->group_count; i++) {
-                for (int j = group_size*i; j < blocks_for_inode_in_group + get_inode_table_bid(pt->groups[i]); j++) {
-                        block_book[j] = 1;
-                }
-        }
-
         return 0;
 }
 
@@ -505,7 +548,7 @@ static int mark_child_blocks_in_book(partition_t *pt, int inode)
 
                 for (j = 0; j < blocks->len; j++) {
                         get(blocks, j, &block_id);
-                        block_book[block_id] = 1;
+                        SET_BIT(block_bmap, block_id);
                 }
                 delete_slice(blocks);
         }
@@ -514,33 +557,84 @@ static int mark_child_blocks_in_book(partition_t *pt, int inode)
         return 0;
 }
 
+static int is_pre_allocated(partition_t *pt, int id)
+{
+        int inodes_size = get_inodes_per_group(pt) *  sizeof(struct ext2_inode);
+        int inodes_blocks = (inodes_size + get_block_size(pt) - 1) / get_block_size(pt);
+
+        for (int i = 0; i < pt->group_count; i++) {
+                int start = i * get_blocks_per_group(pt);
+                int inodes_table_start = get_inode_table_bid(pt->groups[i]);
+                int end = inodes_table_start + inodes_blocks;
+                if (id >= start && id < end) {
+                        return 1;
+                }
+        }
+        return 0;
+}
+
+static inline void fix_bit(int i, int v)
+{
+        if (v == 0) {
+                CLR_BIT(block_bmap, i);
+                printf("after clear %d\n", GET_BIT(block_bmap, i));
+                exit(0);
+                return;
+        }
+        SET_BIT(block_bmap, i);
+}
+
 static int fix_block_bitmap(partition_t *pt)
 {
-        for (int i = 0; i < block_num; i++) {
-                if (block_book[i] != block_allocated(pt, i)) {
-                        printf("block bitmap not consistent, count: %d, in map: %d, block %d\n", block_book[i], block_allocated(pt, i), i);
+        int changed = 0;
+        for (int i = 1; i <= block_num; i++) {
+                if (GET_BIT(block_bmap, i) != block_allocated(pt, i)) {
+                        if (is_pre_allocated(pt, i)) {
+                                SET_BIT(block_bmap, i);
+                                continue;
+                        }
+
+                        if (i >= pt->super_block->s_blocks_count) {
+                                fix_bit(i, block_allocated(pt, i));
+                                continue;
+                        }
+                        changed = 1;
+                        if (GET_BIT(block_bmap, i) == 1) {
+                                printf("Block bitmap differences +%d\n", i);
+                        } else {
+                                printf("Block bitmap differences -%d\n", i);
+                        }
                 }
         }
 
-        int total = 0;
-        for (int i = 0; i < block_num; i++) {
-                if (block_book[i] == 1) {
-                        total++;
-                }
-        }
-        printf("total used %d / %d\n", total, block_num);
-        printf("reserved blocks %d / %d\n", pt->super_block->s_r_blocks_count, pt->super_block->s_blocks_count);
-
+        //int total = 1;
+        //for (int i = 1; i <= block_num; i++) {
+        //        if (GET_BIT(block_bmap, i) == 1) {
+        //                total++;
+        //        }
+        //}
+        //printf("total used %d / %d\n", total, block_num);
+        //printf("reserved blocks %d / %d\n", pt->super_block->s_r_blocks_count, pt->super_block->s_blocks_count);
+        //
         //int total_free = get_free_blocks_count(pt->groups[0]) + get_free_blocks_count(pt->groups[1]) + get_free_blocks_count(pt->groups[2]);
-        //printf("n %d, total %d\n", n, total_free);
         //printf("tottttal block true %d\n", block_num);
-        //printf("totoal used %d\n", block_num - total_free);
+        //printf("total used from desc %d\n", block_num - total_free);
+
+        // write back the bitmap
+        if (changed) {
+                for (int i = 0; i < pt->group_count; i++) {
+                        int bitmap_block_start = get_block_bitmap_bid(pt->groups[i]);
+                        write_block(pt, bitmap_block_start, 1, block_bmap+i*get_block_size(pt));
+                }
+        }
         return 0;
 }
 
 int check_block_bitmap(partition_t *pt)
 {
-        alloc_block_book(pt);
+        printf("Pass 4: Checking group summary information\n");
+
+        alloc_block_bitmap(pt);
 
         list_t *queue = ll_new_list(sizeof(int));
 
@@ -549,7 +643,7 @@ int check_block_bitmap(partition_t *pt)
         for (int j = 0; j < blocks->len; j++) {
                 int block_id;
                 get(blocks, j, &block_id);
-                block_book[block_id] = 1;
+                SET_BIT(block_bmap, block_id);
         }
 
         ll_append(queue, &root_inode); // enqueue the root;
@@ -559,6 +653,20 @@ int check_block_bitmap(partition_t *pt)
         ll_delete_list(queue);
 
         fix_block_bitmap(pt);
+
+        return 0;
+}
+
+int do_check(partition_t *pt)
+{
+        pass++;
+        check_dir_ptrs(pt);
+
+        pass++;
+        check_inode_ptr(pt);
+
+        pass++;
+        check_block_bitmap(pt);
 
         return 0;
 }

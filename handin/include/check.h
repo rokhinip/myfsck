@@ -8,5 +8,6 @@ void print_dirs(partition_t *pt);
 void check_dir_ptrs(partition_t *pt);
 int check_inode_ptr(partition_t *pt);
 int check_block_bitmap(partition_t *pt);
+int do_check(partition_t *pt);
 
 #endif

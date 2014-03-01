@@ -144,3 +144,8 @@ int open_disk(char *path, disk_t *disk)
         }
         return 0;
 }
+
+int is_ext2_partition(partition_t *pt)
+{
+        return IS_EXT2_PARTITION(pt);
+}
