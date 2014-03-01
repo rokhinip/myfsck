@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "disk.h"
 #include "genhd.h"
@@ -142,6 +143,34 @@ int open_disk(char *path, disk_t *disk)
                         load_groups(disk->partitions[i]);
                 }
         }
+        return 0;
+}
+
+int free_disk(disk_t *disk)
+{
+        close(device);
+        for (int i = 0; i < disk->partition_count; i++) {
+                partition_t *pt = disk->partitions[i];
+                free(pt->partition_info);
+                free(pt->super_block);
+
+                for (int j = 0; j < pt->group_count; j++) {
+                        group_t *g = pt->groups[j];
+                        free(g->desc);
+                        free(g->block_bitmap);
+                        free(g->inode_bitmap);
+
+                        for (int k = 0; k < g->entry_count; k++) {
+                                free(g->inode_table[k]);
+                        }
+                        free(g->inode_table);
+                        free(g);
+                }
+                free(pt->groups);
+                free(pt);
+        }
+        free(disk->partitions);
+
         return 0;
 }
 

@@ -3,14 +3,6 @@
 
 #include "ext2_fs.h"
 
-typedef struct block_slice_s {
-        int *array;
-
-        // length and capcity
-        int len;
-        int cap;
-}block_slice_t;
-
 // struct for one block group
 typedef struct group_s {
         int id;
@@ -41,5 +33,6 @@ typedef struct disk_s {
 // open a disk
 int open_disk(char *path, disk_t *disk);
 int is_ext2_partition(partition_t *pt);
+int free_disk(disk_t *disk);
 
 #endif

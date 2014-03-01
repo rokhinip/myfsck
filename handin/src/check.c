@@ -143,6 +143,41 @@ int write_dirs(partition_t *pt, int inode_id, list_t *list)
         return 0;
 }
 
+static int delete_other_parent(partition_t *pt, int child_inode, int parent_inode)
+{
+        if (parent_inode > pt->super_block->s_inodes_count) {
+                return -1;
+        }
+        int modified = 0;
+        slice_t *s = get_child_dirs(pt, parent_inode);
+        list_t *list = slice_to_list(s);
+        list_t *modified_list = ll_new_list(list->item_size);
+
+        while (list->len > 0) {
+                struct ext2_dir_entry_2 dir;
+                ll_pop(list, &dir);
+                if (dir.inode == child_inode) {
+                        modified = 1;
+                        continue;
+                }
+                ll_append(modified_list, &dir);
+        }
+
+        if (modified) {
+                // write
+                //printf("write\n");
+                //printf("child %d parent %d\n", child_inode, parent_inode);
+                write_dirs(pt, parent_inode, modified_list);
+                //exit(0);
+        }
+
+        delete_slice(s);
+        ll_delete_list(list);
+        ll_delete_list(modified_list);
+
+        return 0;
+}
+
 int check_self_parent(partition_t *pt, int self_inode, int parent_inode)
 {
         int need_write_back = 0;
@@ -159,11 +194,12 @@ int check_self_parent(partition_t *pt, int self_inode, int parent_inode)
         if (parent_dir.inode != parent_inode) {
                 need_write_back = 1;
                 if (pass == 1) {
-                        printf("parent ptr error for inode %d\n", self_inode);
+                        printf("parent ptr error for inode %d, should point to %d, found %d\n", self_inode, parent_inode, parent_dir.inode);
                 }
                 if (parent_dir.name_len != 2 || strncmp(parent_dir.name, "..", 2) != 0) {
                         ll_push(list, &parent_dir);
                 }
+                delete_other_parent(pt, self_inode, parent_dir.inode);
                 modify_dir(&parent_dir, parent_inode, "..", 2);
         }
 
@@ -246,7 +282,7 @@ int check_dir(partition_t *pt, int inode_id)
                 }
         }
 
-        free(s);
+        delete_slice(s);
         return 0;
 }
 
@@ -466,7 +502,7 @@ int fix_idle_inodes(partition_t *pt)
 
                 list_t *list = slice_to_list(lost_found);
                 write_dirs(pt, lost_found_inode, list);
-                free(list);
+                ll_delete_list(list);
         }
 
         free(lost_found);
@@ -650,9 +686,10 @@ int check_block_bitmap(partition_t *pt)
 
         breadth_search(queue, pt, mark_child_blocks_in_book);
 
-        ll_delete_list(queue);
-
         fix_block_bitmap(pt);
+
+        ll_delete_list(queue);
+        delete_slice(blocks);
 
         return 0;
 }

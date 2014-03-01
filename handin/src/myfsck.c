@@ -79,26 +79,31 @@ int main(int argc, char *argv[])
         // part III
 
         if (!fix_partition) {
-                return 0;
+                goto END;
         }
 
         if (fix_partition_number == 0) {
                 for (int i = 0; i < disk.partition_count; i++) {
                         pass = 0;
                         if (is_ext2_partition(disk.partitions[i])) {
+                                printf("Checking artition %d\n", i+1);
                                 do_check(disk.partitions[i]);
                         }
                 }
-                return 0;
+                goto END;
         }
 
         if (!is_ext2_partition(disk.partitions[fix_partition_number-1])) {
+                printf("Checking artition %d\n", fix_partition_number);
                 printf("Trying to run fsck on an invalid partition\n");
-                return -1;
+                goto END;
         }
 
         pass = 0;
         do_check(disk.partitions[fix_partition_number-1]);
+
+END:
+        free_disk(&disk);
 
         return 0;
 }
