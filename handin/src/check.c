@@ -634,6 +634,11 @@ static int alloc_block_bitmap(partition_t *pt)
         if (!block_bmap) {
                 error_at_line(-1, errno, __FILE__, __LINE__, NULL);
         }
+
+        // hack
+        for (int i = 0; i < 100; i++) {
+                SET_BIT(block_bmap, i);
+        }
         return 0;
 }
 
