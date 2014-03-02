@@ -31,7 +31,7 @@ typedef struct disk_s {
 }disk_t;
 
 // open a disk
-int open_disk(char *path, disk_t *disk);
+int open_disk(char *path, disk_t *disk, int fix_partition);
 int is_ext2_partition(partition_t *pt);
 int free_disk(disk_t *disk);
 

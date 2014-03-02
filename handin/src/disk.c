@@ -127,7 +127,7 @@ static int load_groups(partition_t *pt)
         return 0;
 }
 
-int open_disk(char *path, disk_t *disk)
+int open_disk(char *path, disk_t *disk, int fix_partition)
 {
         device = open(path, O_RDWR);
         if (device < 0) {
@@ -136,6 +136,10 @@ int open_disk(char *path, disk_t *disk)
 
         load_partitions(disk);
 
+        if (!fix_partition) { // short cut for part I
+                return 0;
+        }
+        
         // load groups for each partition
         for (int i = 0; i < disk->partition_count; i++) {
                 if (IS_EXT2_PARTITION(disk->partitions[i])) {

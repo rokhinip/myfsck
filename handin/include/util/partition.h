@@ -30,6 +30,7 @@ slice_t * get_child_dirs(partition_t *pt, int inode_id);
 int get_lost_found_inode(partition_t *pt);
 
 //
+int is_valid_inode(partition_t *pt, int inode);
 int is_dir(partition_t *pt, int inode_id);
 int is_symbol(partition_t *pt, int inode_id);
 int block_allocated(partition_t *pt, int block_number);

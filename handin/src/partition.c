@@ -24,6 +24,8 @@ extern int device;
 extern unsigned int super_block_offset;
 extern unsigned int group_desc_block_offset;
 
+int is_valid_inode(partition_t *pt, int inode);
+
 // getters for a partition
 int get_number_of_groups(partition_t *pt)
 {
@@ -156,6 +158,9 @@ int inode_allocated(partition_t *pt, int inode_number)
 
 struct ext2_inode * get_inode_entry(partition_t *pt, int inode_id)
 {
+        if (!is_valid_inode(pt, inode_id)) {
+                return NULL;
+        }
         int inodes_per_group = get_inodes_per_group(pt);
 
         // inode start from 1
@@ -168,6 +173,9 @@ struct ext2_inode * get_inode_entry(partition_t *pt, int inode_id)
 int is_dir(partition_t *pt, int inode_id)
 {
         struct ext2_inode *inode = get_inode_entry(pt, inode_id);
+        if (inode == NULL) {
+                return 0;
+        }
         return (inode->i_mode & EXT2_S_IFDIR) == EXT2_S_IFDIR;
 }
 
@@ -417,4 +425,12 @@ slice_t * get_allocated_blocks(partition_t *pt, int inode)
                 free(second_block_buf);
         }
         return s;
+}
+
+int is_valid_inode(partition_t *pt, int inode)
+{
+        if (inode < 0 || inode > pt->super_block->s_inodes_count) {
+                return 0;
+        }
+        return 1;
 }

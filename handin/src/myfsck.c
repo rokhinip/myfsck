@@ -24,6 +24,7 @@ void print_usage(char *name)
                 printf("%s ", usage_strings[i]);
         }
         printf("\n");
+        fflush(stdout);
         exit(-1);
 }
 
@@ -37,7 +38,7 @@ int main(int argc, char *argv[])
         char path_to_disk_image[256];
 
         disk_t disk;
-
+        
         if (argc < 5) {
                 print_usage(argv[0]);
         }
@@ -67,10 +68,11 @@ int main(int argc, char *argv[])
         }
 
         // open the disk
-        open_disk(path_to_disk_image, &disk);
+        open_disk(path_to_disk_image, &disk, fix_partition);
         // part I
         if (read_partition) {
                 print_partitions(&disk, partition_number);
+                return 0;
         }
 
         // part II
@@ -86,7 +88,7 @@ int main(int argc, char *argv[])
                 for (int i = 0; i < disk.partition_count; i++) {
                         pass = 0;
                         if (is_ext2_partition(disk.partitions[i])) {
-                                printf("Checking artition %d\n", i+1);
+                                printf("Checking partition %d\n", i+1);
                                 do_check(disk.partitions[i]);
                         }
                 }
@@ -94,7 +96,7 @@ int main(int argc, char *argv[])
         }
 
         if (!is_ext2_partition(disk.partitions[fix_partition_number-1])) {
-                printf("Checking artition %d\n", fix_partition_number);
+                printf("Checking partition %d\n", fix_partition_number);
                 printf("Trying to run fsck on an invalid partition\n");
                 goto END;
         }
