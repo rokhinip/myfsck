@@ -5,7 +5,7 @@
 #include <unistd.h>
 
 #include "myfsck.h"
-#include "check.h"
+#include "checker.h"
 #include "disk.h"
 #include "util/partition.h"
 #include "util/printer.h"

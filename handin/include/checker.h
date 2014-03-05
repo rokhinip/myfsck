@@ -1,5 +1,5 @@
-#ifndef _CHECK_H
-#define _CHECK_H
+#ifndef _CHECKER_H
+#define _CHECKER_H
 
 #include "util/partition.h"
 
