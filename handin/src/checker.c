@@ -41,14 +41,6 @@ int breadth_search(list_t* queue, partition_t *pt,
                 }
                 func(pt, inode_id);
 
-                //if (inode_id == 0) { // delim
-                //        if (queue->len == 0) {
-                //                break;
-                //        }
-                //        ll_append(queue, &inode_id);
-                //        continue;
-                //}
-
                 // get child list
                 slice_t *children = get_child_inodes(pt, inode_id);
 
@@ -84,9 +76,6 @@ void print_dirs(partition_t *pt)
 
         int root_inode = 2;
         ll_append(queue, &root_inode); // enqueue the root;
-
-        //int delim = 0;
-        //ll_append(queue, &delim); // enqueue the delim;
 
         breadth_search(queue, pt, print_dir);
 
@@ -367,25 +356,6 @@ int mark_only_child_inodes_in_book(partition_t *pt, int inode)
         return 0;
 }
 
-// group id starts from 0
-//static int get_blocks_count_for_inodes_in_group(partition_t *pt, int group_id)
-//{
-//        int inodes_in_group;
-//        int inodes_per_block = get_block_size(pt) / sizeof(struct ext2_inode);
-//
-//        int count = pt->super_block->s_inodes_count / pt->super_block->s_inodes_per_group / (group_id + 1);
-//        printf("pt->super %d pt->per goup %d id %d\n, count", pt->super_block->s_inodes_count, pt->super_block->s_inodes_per_group, group_id);
-//        if (count > 0) {
-//                inodes_in_group = pt->super_block->s_inodes_per_group;
-//        } else {
-//                inodes_in_group = pt->super_block->s_inodes_count % pt->super_block->s_inodes_per_group;
-//        }
-//
-//        int blocks_of_inodes_in_group = (inodes_in_group + (inodes_per_block - 1)) / inodes_per_block;
-//
-//        return blocks_of_inodes_in_group;
-//}
-
 static char ** allocate_inode_block(partition_t *pt) {
         int inodes_per_block = get_block_size(pt) / sizeof(struct ext2_inode);
         int inodes_per_group = get_inodes_per_group(pt);
@@ -428,10 +398,6 @@ static int modify_inode_block_array(partition_t *pt, char **block_array,
 
         int block_index = (inode_id - 1) / inode_entry_per_block;
         int offset_in_block = (inode_id - 1) % inode_entry_per_block * sizeof(struct ext2_inode);
-
-        //struct ext2_inode old_entry;
-        //memcpy(&old_entry, block_array[block_index]+offset_in_block, sizeof(struct ext2_inode));
-        //printf("old links count %d\n", old_entry.i_links_count);
 
         memcpy(block_array[block_index]+offset_in_block, entry, sizeof(struct ext2_inode));
         dirty_array[block_index] = 1;
@@ -716,9 +682,6 @@ static int fix_block_bitmap(partition_t *pt)
                         }
                         changed = 1;
 
-                        //char *buf = read_block(pt, 3, 1);
-                        //print_sector((unsigned char *)buf);
-                        //printf("%s\n", buf);
                         if (GET_BIT(block_bmap, i) == 1) {
                                 printf("Block bitmap differences +%d\n", i);
                         } else {
